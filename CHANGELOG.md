@@ -4,6 +4,32 @@
 [语义化版本](https://semver.org/lang/zh-CN/)。
 Format based on Keep a Changelog; this project adheres to Semantic Versioning.
 
+## [0.4.0] - 2026-06-14
+
+来自创意 workflow 的功能批次(3/4;多源 venue 冲突选择器留作下一轮核心改造)。
+Feature batch from the ideation workflow (3 of 4; the multi-source venue
+conflict picker is deferred to its own round as a core-engine change).
+
+### Added / 新增
+
+- **查找已发表的预印本**(工具菜单,整库):筛出仍是 arXiv 预印本的条目,查是否已有
+  正式发表版,**只把"已毕业"的**列入预览并应用。配套 **`Published?` 列**(preprint /
+  published)用于一眼分诊。
+  **Find published preprints** (Tools menu): filters arXiv-only preprints, checks
+  for a published version, previews/applies only the graduated ones. Plus a
+  **`Published?`** item-tree column.
+- **引用数**:右键条目「拉取引用数」从 Semantic Scholar / OpenAlex 取引用数,写入
+  Extra;配套可排序的 **`Citations` 列**。
+  **Citation counts**: right-click "Fetch citation counts" (S2 / OpenAlex),
+  stored in Extra and shown by a **`Citations`** column.
+- **item-pane「元数据体检」区**:选中条目时,右侧栏显示 预印本状态 / 缺哪些字段 /
+  引用数 / 上次刷新,并带「刷新此条」「撤销」按钮。
+  An item-pane **"health" section**: preprint status, missing fields, citations,
+  last-refreshed, with Refresh / Restore buttons.
+
+> 新增的列/面板都用 Zotero 原生 API 注册并包了 try/catch —— 即便某版本不支持也不会
+> 影响插件其余功能。/ The columns/section are registered defensively.
+
 ## [0.3.0] - 2026-06-14
 
 ### Added / 新增

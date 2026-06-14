@@ -12,11 +12,15 @@ import {
   applyRestore,
   computePlan,
   computeRestore,
+  fetchCitationCount,
   gatherItems,
+  isArxivOnlyPreprint,
+  planGraduatesPreprint,
   QueryCache,
   readConfig,
   RefreshScope,
   RestorePlan,
+  writeCitationCount,
 } from "./engine";
 import { ItemPlan, RunConfig } from "./types";
 
@@ -209,6 +213,12 @@ export function registerMenus(): void {
     label: getString("menu-restore-selected"),
     commandListener: () => void runRestore(),
   });
+  ztoolkit.Menu.register("item", {
+    tag: "menuitem",
+    id: `zotero-itemmenu-${config.addonRef}-citations`,
+    label: getString("menu-fetch-citations"),
+    commandListener: () => void runFetchCitations("selected"),
+  });
   // 集合右键菜单也覆盖"保存的检索"——点击时按选中项类型分派。
   // The collection menu also covers saved searches — dispatch by selection.
   ztoolkit.Menu.register("collection", {
@@ -224,6 +234,13 @@ export function registerMenus(): void {
     label: getString("menu-refresh-library"),
     icon,
     commandListener: () => void runRefresh("library"),
+  });
+  ztoolkit.Menu.register("menuTools", {
+    tag: "menuitem",
+    id: `zotero-menutools-${config.addonRef}-preprintscan`,
+    label: getString("menu-preprint-scan"),
+    icon,
+    commandListener: () => void runPreprintScan("library"),
   });
 }
 
@@ -500,7 +517,14 @@ export async function runRefresh(scope: RefreshScope): Promise<void> {
     return;
   }
 
-  // 应用阶段 / apply phase.
+  await applyPlans(finalPlans, cfg);
+}
+
+/** 应用一批计划:逐条写回,进度 + 失败/冲突汇报 / apply a batch of plans. */
+async function applyPlans(
+  finalPlans: ItemPlan[],
+  cfg: RunConfig,
+): Promise<void> {
   const applyProgress = new ztoolkit.ProgressWindow(config.addonName, {
     closeOnClick: false,
     closeTime: -1,
@@ -634,4 +658,137 @@ export async function runRestore(): Promise<void> {
     `撤销完成 / Restored ${done}` + (failed ? `，失败 ${failed}` : ""),
     failed ? "fail" : "success",
   );
+}
+
+/**
+ * 查找已发表的预印本:筛出仍是 arXiv 预印本的条目,查是否已有正式发表版,
+ * 只把"已毕业"的列入预览并应用。
+ *
+ * Find published preprints: filter to arXiv-only preprints, check for a
+ * published version, preview/apply only the ones that have graduated.
+ */
+export async function runPreprintScan(scope: RefreshScope): Promise<void> {
+  const cfg = readConfig();
+  let items = (await gatherItems(scope)).filter((it) =>
+    isArxivOnlyPreprint(it),
+  );
+  if (!items.length) {
+    popup("没有未发表的 arXiv 预印本 / No unpublished arXiv preprints");
+    return;
+  }
+  const win = Zotero.getMainWindow();
+  if (items.length > cfg.maxItems) items = items.slice(0, cfg.maxItems);
+  const nSources =
+    [
+      cfg.sources.crossref,
+      cfg.sources.openalex,
+      cfg.sources.s2,
+      cfg.sources.dblp,
+    ].filter(Boolean).length || 1;
+  const estSec = Math.round((items.length * nSources * cfg.delayMs) / 1000);
+  if (
+    win &&
+    !win.confirm(
+      `将检查 ${items.length} 个 arXiv 预印本是否已发表(约 ${estSec}s)。\n` +
+        `Check ${items.length} preprints for published versions (~${estSec}s).\n\n继续? / Continue?`,
+    )
+  ) {
+    return;
+  }
+  if (
+    !cfg.contactEmail.trim() &&
+    (cfg.sources.crossref || cfg.sources.openalex)
+  ) {
+    if (!remindEmail(win)) return;
+  }
+
+  const { plans, cancelled, processedCount } = await runQueryWithCancel(
+    items,
+    cfg,
+  );
+  if (cancelled) {
+    popup(`已取消 / Cancelled (${processedCount}/${items.length})`);
+    return;
+  }
+  const graduated = plans.filter(
+    (p) => p.status === "would_update" && planGraduatesPreprint(p),
+  );
+  if (!graduated.length) {
+    popup("未发现已发表的版本 / No published versions found");
+    return;
+  }
+  const { apply, excluded } = await showPreviewDialog(graduated, graduated);
+  if (!apply) return;
+  const finalPlans = graduated.filter((_, i) => !excluded.has(i));
+  if (!finalPlans.length) {
+    popup("未选择任何条目 / Nothing selected");
+    return;
+  }
+  await applyPlans(finalPlans, cfg);
+}
+
+/**
+ * 拉取引用数:从 S2/OpenAlex 取引用数,写入 Extra(供 Citations 列显示)。
+ *
+ * Fetch citation counts from S2/OpenAlex and store them in Extra (shown by the
+ * Citations column).
+ */
+export async function runFetchCitations(scope: RefreshScope): Promise<void> {
+  const cfg = readConfig();
+  let items = await gatherItems(scope);
+  if (!items.length) {
+    popup("没有可处理的条目 / No items");
+    return;
+  }
+  const win = Zotero.getMainWindow();
+  if (scope !== "selected") {
+    if (items.length > cfg.maxItems) items = items.slice(0, cfg.maxItems);
+    const estSec = Math.round((items.length * cfg.delayMs) / 1000);
+    if (
+      win &&
+      !win.confirm(
+        `将为 ${items.length} 条拉取引用数(约 ${estSec}s)。\n` +
+          `Fetch citation counts for ${items.length} items (~${estSec}s).\n\n继续? / Continue?`,
+      )
+    ) {
+      return;
+    }
+  }
+  if (!cfg.contactEmail.trim() && cfg.sources.openalex) {
+    if (!remindEmail(win)) return;
+  }
+  const progress = new ztoolkit.ProgressWindow(config.addonName, {
+    closeOnClick: false,
+    closeTime: -1,
+  })
+    .createLine({
+      text: `拉取引用数 0/${items.length}`,
+      type: "default",
+      progress: 0,
+    })
+    .show();
+  let done = 0;
+  let got = 0;
+  await runPool(items, cfg.concurrency, async (item) => {
+    try {
+      const r = await fetchCitationCount(item, cfg);
+      if (r) {
+        await writeCitationCount(item, r.count, r.source);
+        got++;
+      }
+    } catch (e) {
+      ztoolkit.log("[MetaRefresh] citation fetch failed", e);
+    }
+    done++;
+    progress.changeLine({
+      text: `拉取引用数 ${done}/${items.length}(命中 ${got})`,
+      progress: Math.round((done / items.length) * 100),
+    });
+  });
+  progress.changeLine({
+    text: `完成 / Done — 命中 ${got}/${items.length}`,
+    type: "success",
+    progress: 100,
+  });
+  progress.startCloseTimer(4000);
 }

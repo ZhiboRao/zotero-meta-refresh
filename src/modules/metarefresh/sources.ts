@@ -129,6 +129,7 @@ interface OpenAlexWork {
   doi?: string;
   abstract_inverted_index?: Record<string, number[]>;
   type?: string;
+  cited_by_count?: number;
 }
 
 export function reconstructAbstract(
@@ -170,6 +171,8 @@ function parseOpenAlex(
     DOI: (w.doi || "").replace(/^https?:\/\/doi\.org\//i, ""),
     abstractNote: reconstructAbstract(w.abstract_inverted_index),
     type: w.type || "",
+    citationCount:
+      typeof w.cited_by_count === "number" ? w.cited_by_count : undefined,
   };
 }
 
@@ -208,10 +211,11 @@ interface S2Paper {
   publicationDate?: string;
   externalIds?: { DOI?: string };
   abstract?: string;
+  citationCount?: number;
 }
 
 const S2_FIELDS =
-  "title,abstract,year,publicationDate,venue,publicationVenue,externalIds,authors,journal";
+  "title,abstract,year,publicationDate,venue,publicationVenue,externalIds,authors,journal,citationCount";
 
 function parseS2(p: S2Paper | null | undefined): SourceRecord | null {
   if (!p || !p.title) return null;
@@ -235,6 +239,8 @@ function parseS2(p: S2Paper | null | undefined): SourceRecord | null {
     DOI: (p.externalIds && p.externalIds.DOI) || "",
     abstractNote: p.abstract || "",
     type: "",
+    citationCount:
+      typeof p.citationCount === "number" ? p.citationCount : undefined,
   };
 }
 

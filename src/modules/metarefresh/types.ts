@@ -37,6 +37,8 @@ export interface SourceRecord {
   DOI: string;
   abstractNote: string;
   type: string;
+  /** 引用数(若数据源提供)/ citation count, if the source provides it. */
+  citationCount?: number;
 }
 
 /**

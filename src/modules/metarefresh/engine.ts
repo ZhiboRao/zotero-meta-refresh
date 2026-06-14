@@ -601,3 +601,103 @@ export async function applyRestore(item: Zotero.Item): Promise<boolean> {
   await item.saveTx();
   return true;
 }
+
+// —— 预印本 / 引用数 / Preprints & citations ————————————————————
+
+/**
+ * 该条目是否"还只是 arXiv 预印本":有 arXiv id,且 DOI 为空或仍是 arXiv 的 DOI。
+ *
+ * Whether this item is still an arXiv-only preprint: it has an arXiv id and
+ * either no DOI or only an arXiv DOI (arxiv / 10.48550).
+ */
+export function isArxivOnlyPreprint(item: Zotero.Item): boolean {
+  if (!extractArxivId(item)) return false;
+  const doi = String(item.getField("DOI") || "")
+    .trim()
+    .toLowerCase();
+  if (!doi) return true;
+  return doi.includes("arxiv") || doi.includes("10.48550");
+}
+
+/**
+ * 该计划是否把预印本"升级"成正式发表(出现了非 arXiv 的 DOI 或正式 venue)。
+ *
+ * Whether the plan upgrades a preprint to a published version (a non-arXiv DOI
+ * or a real venue appears).
+ */
+export function planGraduatesPreprint(plan: ItemPlan): boolean {
+  return plan.fields.some((f) => {
+    if (f.field === "DOI") {
+      const v = f.newVal.toLowerCase();
+      return !!v && !v.includes("arxiv") && !v.includes("10.48550");
+    }
+    if (f.field === "publicationTitle" || f.field === "proceedingsTitle") {
+      return !!f.newVal && !/arxiv/i.test(f.newVal);
+    }
+    return false;
+  });
+}
+
+const CITE_TAG = "MetaRefresh-cite";
+const citeLineRe = new RegExp(`^\\[${CITE_TAG} [^\\]]+\\] Citations: (\\d+)`);
+
+/** 从 Extra 读已存的引用数 / read a stored citation count from Extra. */
+export function readCitationCount(item: Zotero.Item): number | null {
+  for (const l of (item.getField("extra") || "").split("\n")) {
+    const m = l.match(citeLineRe);
+    if (m) return parseInt(m[1], 10);
+  }
+  return null;
+}
+
+/**
+ * 查询单条引用数(S2 优先,OpenAlex 兜底)。
+ *
+ * Fetch one item's citation count (S2 first, OpenAlex fallback).
+ */
+export async function fetchCitationCount(
+  item: Zotero.Item,
+  config: RunConfig,
+): Promise<{ count: number; source: string } | null> {
+  const doi = String(item.getField("DOI") || "");
+  const realDoi = !!doi && !doi.toLowerCase().includes("arxiv");
+  const arxiv = extractArxivId(item);
+  const title = item.getField("title") || "";
+  let rec: SourceRecord | null = null;
+  if (config.sources.s2) {
+    rec = realDoi
+      ? await queryS2(config, doi, "doi")
+      : arxiv
+        ? await queryS2(config, arxiv, "arxiv")
+        : title
+          ? await queryS2(config, title, "title")
+          : null;
+  }
+  if ((!rec || rec.citationCount == null) && config.sources.openalex) {
+    const oa = realDoi
+      ? await queryOpenAlex(config, doi, "doi")
+      : title
+        ? await queryOpenAlex(config, title, "title")
+        : null;
+    if (oa && oa.citationCount != null) rec = oa;
+  }
+  return rec && rec.citationCount != null
+    ? { count: rec.citationCount, source: rec.source }
+    : null;
+}
+
+/** 把引用数写入 Extra(替换旧的 cite 行)/ write the citation count into Extra. */
+export async function writeCitationCount(
+  item: Zotero.Item,
+  count: number,
+  source: string,
+): Promise<void> {
+  const stamp = new Date().toISOString().slice(0, 10);
+  const line = `[${CITE_TAG} ${stamp}] Citations: ${count} (${source})`;
+  const kept = (item.getField("extra") || "")
+    .split("\n")
+    .filter((l) => !citeLineRe.test(l));
+  kept.push(line);
+  item.setField("extra", kept.join("\n").replace(/^\n+|\n+$/g, ""));
+  await item.saveTx();
+}

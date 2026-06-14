@@ -119,6 +119,21 @@ earlier runs. Requires "Back up to Extra" to have been on.
 
 ---
 
+## 4.5 更多功能 / More features
+
+- **查找已发表的预印本**(`工具菜单 → 查找已发表的预印本`):扫全库,挑出仍是 arXiv
+  预印本的条目,查是否已有正式发表版,**只把已"毕业"的**列入预览。最适合定期清理"等着
+  见刊"的那批 arXiv。Tools menu → finds arXiv preprints that now have a published
+  version.
+- **拉取引用数**(右键条目 → `拉取引用数`):从 Semantic Scholar / OpenAlex 取引用数,
+  存到 Extra。Right-click → fetch citation counts (S2 / OpenAlex), stored in Extra.
+- **两个列**(在条目列表表头右键 → 勾选):`Published?`(preprint / published)、
+  `Citations`(引用数)。Add the `Published?` and `Citations` columns via the column
+  picker (right-click the list header).
+- **item-pane 体检区**:选中条目时,右侧栏的「元数据刷新」区显示 预印本状态 / 缺字段 /
+  引用数 / 上次刷新,并有「刷新」「撤销」按钮。An item-pane section shows health +
+  quick Refresh/Restore buttons.
+
 ## 5. 常见问题 / FAQ
 
 **Q: 安装时报「could not be installed / 不兼容」?**

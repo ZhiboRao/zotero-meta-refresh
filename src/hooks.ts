@@ -8,6 +8,11 @@ import { getString, initLocale } from "./utils/locale";
 import { createZToolkit } from "./utils/ztoolkit";
 import { registerPrefsScripts } from "./modules/preferenceScript";
 import { registerMenus } from "./modules/metarefresh/ui";
+import {
+  registerColumns,
+  registerItemPaneSection,
+  unregisterNative,
+} from "./modules/metarefresh/native";
 
 /** 注册偏好设置面板 / Register the preferences pane. */
 function registerPrefs(): void {
@@ -35,14 +40,27 @@ async function onStartup() {
   addon.data.ztoolkit = createZToolkit();
   registerPrefs();
   registerMenus();
+  // 原生列与 item-pane 体检区(各自内部 try/catch,失败不影响启动)。
+  // Native columns + item-pane section (each guarded; failure won't break load).
+  registerColumns();
+  registerItemPaneSection();
+
+  await Promise.all(
+    Zotero.getMainWindows().map((win) => onMainWindowLoad(win)),
+  );
 
   addon.data.initialized = true;
 }
 
-/** 每个主窗口加载时:菜单已全局注册,这里无需重复操作。 */
-
-async function onMainWindowLoad(_win: _ZoteroTypes.MainWindow): Promise<void> {
-  // no-op: menus/ztoolkit registered globally in onStartup.
+/** 每个主窗口加载时:把 item-pane 体检区用到的 ftl 注入该窗口。 */
+async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
+  try {
+    win.MozXULElement.insertFTLIfNeeded(
+      `${addon.data.config.addonRef}-mainWindow.ftl`,
+    );
+  } catch {
+    /* item-pane l10n is best-effort */
+  }
 }
 
 /** 主窗口卸载时:仅关闭可能开着的对话框,不在此注销全局菜单。 */
@@ -53,6 +71,7 @@ async function onMainWindowUnload(_win: Window): Promise<void> {
 
 /** 插件关闭:在此统一注销 / unregister everything on shutdown only. */
 function onShutdown(): void {
+  unregisterNative();
   ztoolkit.unregisterAll();
   addon.data.dialog?.window?.close();
   addon.data.alive = false;

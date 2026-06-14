@@ -10,8 +10,7 @@ export const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 /** 标题是否含中日韩汉字 / Does the string contain CJK characters. */
-export const hasChinese = (s: string): boolean =>
-  /[一-鿿]/.test(s || "");
+export const hasChinese = (s: string): boolean => /[一-鿿]/.test(s || "");
 
 /** 归一化标题用于比较 / Normalise a title for comparison. */
 export function normalizeTitle(s: string): string {

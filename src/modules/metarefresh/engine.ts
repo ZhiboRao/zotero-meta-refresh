@@ -27,19 +27,21 @@ import { extractArxivId, hasChinese, similarity, sleep } from "./utils";
 export type RefreshScope = "selected" | "collection" | "library";
 
 /** 字段名 → 对应的偏好开关 key / Zotero field → its pref toggle key. */
-const FIELD_PREF_MAP: Record<string, keyof _ZoteroTypes.Prefs["PluginPrefsMap"]> =
-  {
-    title: "fieldTitle",
-    publicationTitle: "fieldPublicationTitle",
-    date: "fieldDate",
-    volume: "fieldVolume",
-    issue: "fieldIssue",
-    pages: "fieldPages",
-    DOI: "fieldDOI",
-    abstractNote: "fieldAbstractNote",
-    conferenceName: "fieldConferenceName",
-    proceedingsTitle: "fieldProceedingsTitle",
-  };
+const FIELD_PREF_MAP: Record<
+  string,
+  keyof _ZoteroTypes.Prefs["PluginPrefsMap"]
+> = {
+  title: "fieldTitle",
+  publicationTitle: "fieldPublicationTitle",
+  date: "fieldDate",
+  volume: "fieldVolume",
+  issue: "fieldIssue",
+  pages: "fieldPages",
+  DOI: "fieldDOI",
+  abstractNote: "fieldAbstractNote",
+  conferenceName: "fieldConferenceName",
+  proceedingsTitle: "fieldProceedingsTitle",
+};
 
 /**
  * 从偏好读取整轮运行配置。
@@ -77,9 +79,7 @@ export function readConfig(): RunConfig {
  *
  * Gather the regular items to process for a given scope.
  */
-export async function gatherItems(
-  scope: RefreshScope,
-): Promise<Zotero.Item[]> {
+export async function gatherItems(scope: RefreshScope): Promise<Zotero.Item[]> {
   const pane = Zotero.getActiveZoteroPane();
   let items: Zotero.Item[] = [];
   if (scope === "selected") {
@@ -289,7 +289,10 @@ export async function applyPlan(
     if (plan.authors) parts.push(`creators=${plan.authors.oldC}`);
     const backupLine = `[MetaRefresh ${stamp}] ` + parts.join(" | ");
     const oldExtra = item.getField("extra") || "";
-    item.setField("extra", oldExtra ? oldExtra + "\n" + backupLine : backupLine);
+    item.setField(
+      "extra",
+      oldExtra ? oldExtra + "\n" + backupLine : backupLine,
+    );
   }
 
   for (const p of plan.fields) {

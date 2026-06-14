@@ -34,7 +34,9 @@ async function onStartup() {
   initLocale();
   registerPrefs();
 
-  await Promise.all(Zotero.getMainWindows().map((win) => onMainWindowLoad(win)));
+  await Promise.all(
+    Zotero.getMainWindows().map((win) => onMainWindowLoad(win)),
+  );
 
   // 供插件外部(如 scaffold 测试)确认加载完成。
   // Confirms load completion for code outside the plugin (e.g. scaffold tests).
@@ -42,14 +44,14 @@ async function onStartup() {
 }
 
 /** 每个主窗口加载时 / Runs for each main window. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+
 async function onMainWindowLoad(_win: _ZoteroTypes.MainWindow): Promise<void> {
   addon.data.ztoolkit = createZToolkit();
   registerRefreshMenu();
 }
 
 /** 主窗口卸载时 / Runs when a main window unloads. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+
 async function onMainWindowUnload(_win: Window): Promise<void> {
   ztoolkit.unregisterAll();
   addon.data.dialog?.window?.close();

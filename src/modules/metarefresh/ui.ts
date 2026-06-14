@@ -205,6 +205,29 @@ export async function runRefresh(scope: RefreshScope): Promise<void> {
     return;
   }
 
+  // 未填联系邮箱时提醒。仅在启用了用到邮箱的数据源(CrossRef / OpenAlex)时才提醒,
+  // 让用户去设置里填自己的邮箱;邮箱只用于礼貌池,可继续也可取消。
+  // Remind when no contact email is set. Only when a source that actually uses
+  // it (CrossRef / OpenAlex) is enabled. The email is only for the polite pool,
+  // so the user may continue or cancel and go fill it in.
+  if (
+    !cfg.contactEmail.trim() &&
+    (cfg.sources.crossref || cfg.sources.openalex)
+  ) {
+    const win = Zotero.getMainWindow();
+    const proceed = win
+      ? win.confirm(
+          "⚠️ 未填写联系邮箱 / No contact email set\n\n" +
+            "CrossRef 和 OpenAlex 建议提供邮箱(礼貌池),以获得更稳定的服务。\n" +
+            "CrossRef and OpenAlex are more reliable with a contact email (polite pool).\n\n" +
+            "请在「工具 → 插件 → Zotero Metadata Refresh」中填写。\n" +
+            "Set it in Tools → Plugins → Zotero Metadata Refresh.\n\n" +
+            "仍要继续吗? / Continue anyway?",
+        )
+      : true;
+    if (!proceed) return;
+  }
+
   // 查询阶段:逐条计算计划,带进度条(网络慢,可能数十秒)。
   // Query phase: compute plans one by one with a progress bar (slow).
   const progress = new ztoolkit.ProgressWindow(config.addonName, {
@@ -283,8 +306,7 @@ export async function runRefresh(scope: RefreshScope): Promise<void> {
     });
   }
   applyProgress.changeLine({
-    text:
-      `完成 / Done — 已更新 ${done}` + (failed ? `，失败 ${failed}` : ""),
+    text: `完成 / Done — 已更新 ${done}` + (failed ? `，失败 ${failed}` : ""),
     type: failed ? "fail" : "success",
     progress: 100,
   });

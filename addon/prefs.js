@@ -1,4 +1,3 @@
-/* eslint-disable no-undef */
 // 默认偏好值 / Default preferences.
 // scaffold 构建时会自动给每个 key 加上 prefsPrefix
 // (extensions.zotero.metarefresh.*),并据此生成 typings/prefs.d.ts。
@@ -26,8 +25,11 @@ pref("useS2", true);
 pref("useDBLP", true);
 
 // —— 凭据 / Credentials ——
-// CrossRef / OpenAlex 礼貌池邮箱 / polite-pool contact email
-pref("contactEmail", "raoxi36@foxmail.com");
+// CrossRef / OpenAlex 礼貌池邮箱。默认留空,由每个用户在设置里填自己的邮箱;
+// 留空时运行刷新会弹出提醒(见 ui.ts)。
+// CrossRef / OpenAlex polite-pool email. Empty by default so each user fills
+// in their own; running a refresh while empty shows a reminder (see ui.ts).
+pref("contactEmail", "");
 pref("s2ApiKey", ""); // Semantic Scholar API key(可留空 / optional)
 
 // —— 字段白名单 / Field whitelist —— 不在白名单内的字段绝不改动。

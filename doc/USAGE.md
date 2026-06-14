@@ -38,6 +38,13 @@ field. Nothing is written until you confirm a **preview**.
 > 预览即「干跑(dry run)」,只有点了 Apply 才真正改库。
 > The preview is the dry run; only **Apply** mutates your library.
 
+**范围 / Scopes**:右键条目 = 处理**选中**;右键**集合** =「刷新本集合…」;
+**工具菜单** =「刷新整个文献库…」。后两者会先弹确认(显示条数与预计耗时),并受设置里
+`maxItems` 上限保护,避免误触整库。
+Right-click items = **selected**; right-click a **collection** = that collection;
+**Tools menu** = whole library. The latter two first confirm (item count + ETA)
+and are capped by the `maxItems` setting.
+
 ---
 
 ## 3. 设置项详解 / Settings reference
@@ -85,14 +92,19 @@ field invalid for the item's type is skipped automatically.
 
 ## 4. 出错了怎么撤销 / How to undo
 
-如果某次刷新改坏了,旧值就在该条目的 **Extra** 字段里(前提是开了「备份到 Extra」):
-找到形如 `[MetaRefresh 日期] 字段=旧值 | …` 的行,手动把旧值填回对应字段即可。
-更稳妥的做法是**真跑前先备份** `~/Zotero/zotero.sqlite`。
+刷新坏了不要紧:选中那些条目 → **右键「从 MetaRefresh 备份恢复…」** → 预览要恢复的
+字段/作者 → 确认即可。这会按 **LIFO**(后进先出)恢复**最近一次**刷新,并移除对应的
+备份行;再点一次可继续往前撤销上一次。前提是当时开着「备份旧值到 Extra」。
 
-If a refresh went wrong, the old values are in the item's **Extra** field (when
-"Back up to Extra" was on): find the `[MetaRefresh date] field=oldvalue | …`
-line and paste values back. Safest of all: back up `~/Zotero/zotero.sqlite`
-before a real run.
+If a refresh went wrong: select those items → right-click **"Restore from
+MetaRefresh backup…"** → preview → confirm. It restores the **latest** refresh
+(LIFO) from the JSON backup lines in Extra and removes that line; repeat to undo
+earlier runs. Requires "Back up to Extra" to have been on.
+
+> 备份以 JSON 行存在 Extra:`[MetaRefresh <时间>] {"fields":{…},"creators":[…]}`。
+> 也仍建议**真跑前先备份** `~/Zotero/zotero.sqlite`。
+> Backups are JSON lines in Extra. Still, backing up `~/Zotero/zotero.sqlite`
+> before a big run is the safest net.
 
 ---
 
@@ -112,6 +124,10 @@ A: 不会主动改。所有改动先在预览里逐字段展示,点 Apply 才写
 
 **Q: 刷新很慢?**
 A: 受 API 限流与「请求间隔」影响。条目多时请耐心;填了联系邮箱/ S2 key 会更顺。
+
+**Q: 一堆条目显示"限流 / rate_limited"?**
+A: 多为 Semantic Scholar 无 key 时被限流。插件已自动退避重试;仍频繁的话,在设置里填
+S2 API key,或调大「请求间隔」,稍后再试。这与"未找到"已分开标注。
 
 **Q: 想自动更新插件?**
 A: 插件 `update_url` 指向本仓库,发布新 Release 后 Zotero 会自动提示更新。

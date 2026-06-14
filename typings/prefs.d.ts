@@ -13,6 +13,7 @@ declare namespace _ZoteroTypes {
       "backupToExtra": boolean;
       "titleSimilarityThreshold": string;
       "delayMs": string;
+      "maxItems": string;
       "useCrossref": boolean;
       "useOpenAlex": boolean;
       "useS2": boolean;

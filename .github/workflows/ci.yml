@@ -1,9 +1,9 @@
 name: CI
 
-# 在 push 到 main 与 PR 时跑 lint + build。
-# 不含需要真实 Zotero 的 test 任务,保证 CI 稳定通过。
-# Runs lint + build on pushes to main and PRs.
-# No Zotero-dependent test job, so CI stays green.
+# 在 push 到 main 与 PR 时跑 lint + 单元测试 + build。
+# 不含需要真实 Zotero 的集成 test 任务,保证 CI 稳定通过。
+# Runs lint + unit tests + build on pushes to main and PRs.
+# No Zotero-dependent integration test, so CI stays green.
 on:
   push:
     branches: [main]
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  lint-and-build:
+  lint-test-build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -22,6 +22,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
       # zotero-types 间接依赖 zotero/epub.js(声明为 git+ssh),改走 https 才能装。
       # zotero-types pulls zotero/epub.js as a git+ssh dep; rewrite it to https.
@@ -33,6 +34,9 @@ jobs:
 
       - name: Lint (prettier + eslint)
         run: npm run lint:check
+
+      - name: Unit tests
+        run: npm run test:unit
 
       - name: Build (scaffold + tsc)
         run: npm run build

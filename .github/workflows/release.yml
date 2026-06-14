@@ -1,0 +1,43 @@
+name: Release
+
+# 仅在推送 vX.Y.Z 标签时触发,构建并把 xpi + update.json 发布到 GitHub Release。
+# 由 zotero-plugin-scaffold 的 release 命令完成(读取 package.json 版本)。
+# Triggered only by pushing a vX.Y.Z tag: builds and publishes xpi + update.json
+# via zotero-plugin-scaffold's release command (uses the package.json version).
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Rewrite GitHub ssh -> https
+        run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish release (xpi + update.json)
+        run: npm run release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

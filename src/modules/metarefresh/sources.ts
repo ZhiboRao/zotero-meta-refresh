@@ -1,36 +1,77 @@
 /**
  * 数据源适配层:CrossRef / OpenAlex / Semantic Scholar / DBLP。
- * 每个源都把结果归一化成 ``SourceRecord``。
+ * 每个源都把结果归一化成 ``SourceRecord``。命中按相似度取最佳;限流/网络错误
+ * 由 ``httpJSON`` 抛 ``TransportError`` 向上传播。
  *
- * Data-source adapters: CrossRef / OpenAlex / Semantic Scholar / DBLP.
- * Each adapter normalises its response into a ``SourceRecord``.
+ * Data-source adapters. Each normalises into a ``SourceRecord``; best match by
+ * title similarity; rate-limit/network errors propagate as ``TransportError``.
  */
 
-import { RunConfig, SourceRecord } from "./types";
-import { httpJSON, similarity } from "./utils";
+import { RunConfig, SourceAuthor, SourceRecord } from "./types";
+import { httpJSON, pickBestByTitle, splitDisplayName } from "./utils";
+
+/** 把 httpJSON 的 host 节流间隔接到运行配置 / per-host throttle from config. */
+function http<T = any>(
+  config: RunConfig,
+  url: string,
+  headers?: Record<string, string>,
+): Promise<T | null> {
+  return httpJSON<T>(url, { headers, delayMs: config.delayMs });
+}
 
 // ============================================================
 // CrossRef
 // ============================================================
 
-function parseCrossRef(w: any): SourceRecord | null {
+interface CrossRefAuthor {
+  given?: string;
+  family?: string;
+  name?: string;
+}
+interface CrossRefWork {
+  author?: CrossRefAuthor[];
+  title?: string | string[];
+  "container-title"?: string | string[];
+  issued?: { "date-parts"?: number[][] };
+  volume?: string;
+  issue?: string;
+  page?: string;
+  DOI?: string;
+  abstract?: string;
+  type?: string;
+}
+
+function first(v: string | string[] | undefined): string {
+  return Array.isArray(v) ? v[0] || "" : v || "";
+}
+
+function crossRefDate(issued: CrossRefWork["issued"]): string {
+  const dp = issued && issued["date-parts"] && issued["date-parts"][0];
+  if (!dp || !dp[0]) return "";
+  const y = String(dp[0]);
+  const mm = dp[1] ? String(dp[1]).padStart(2, "0") : "";
+  const dd = dp[2] ? String(dp[2]).padStart(2, "0") : "";
+  return dd ? `${y}-${mm}-${dd}` : mm ? `${y}-${mm}` : y;
+}
+
+function parseCrossRef(
+  w: CrossRefWork | null | undefined,
+): SourceRecord | null {
   if (!w) return null;
-  const authors = (w.author || []).map((a: any) => ({
-    firstName: a.given || "",
-    lastName: a.family || a.name || "",
-  }));
-  const title = Array.isArray(w.title) ? w.title[0] || "" : w.title || "";
-  const container = Array.isArray(w["container-title"])
-    ? w["container-title"][0] || ""
-    : w["container-title"] || "";
-  const yp = w.issued && w.issued["date-parts"] && w.issued["date-parts"][0];
-  const year = yp && yp[0] ? String(yp[0]) : "";
+  const authors: SourceAuthor[] = (w.author || []).map((a) => {
+    // 仅有 name(无 given/family)通常是机构 → 单字段名。
+    // A bare `name` (no given/family) is usually institutional → single-field.
+    if (!a.given && !a.family && a.name) {
+      return { firstName: "", lastName: a.name, fieldMode: 1 };
+    }
+    return { firstName: a.given || "", lastName: a.family || a.name || "" };
+  });
   return {
     source: "crossref",
-    title,
+    title: first(w.title),
     authors,
-    publicationTitle: container,
-    date: year,
+    publicationTitle: first(w["container-title"]),
+    date: crossRefDate(w.issued),
     volume: w.volume || "",
     issue: w.issue || "",
     pages: w.page || "",
@@ -47,7 +88,7 @@ export async function queryCrossRef(
   const url = `https://api.crossref.org/works/${encodeURIComponent(
     doi,
   )}?mailto=${encodeURIComponent(config.contactEmail)}`;
-  const data = await httpJSON(url);
+  const data = await http<{ message?: CrossRefWork }>(config, url);
   return data && data.message ? parseCrossRef(data.message) : null;
 }
 
@@ -55,48 +96,59 @@ export async function queryCrossRefByTitle(
   config: RunConfig,
   title: string,
 ): Promise<SourceRecord | null> {
-  const url = `https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(
-    title,
-  )}&rows=3&mailto=${encodeURIComponent(config.contactEmail)}`;
-  const data = await httpJSON(url);
+  const url =
+    `https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(title)}` +
+    `&rows=3&select=DOI,title,container-title,author,issued,volume,issue,page,abstract,type` +
+    `&mailto=${encodeURIComponent(config.contactEmail)}`;
+  const data = await http<{ message?: { items?: CrossRefWork[] } }>(
+    config,
+    url,
+  );
   const items = (data && data.message && data.message.items) || [];
-  let best: SourceRecord | null = null;
-  let bestSim = 0;
-  for (const it of items) {
-    const p = parseCrossRef(it);
-    if (!p) continue;
-    const s = similarity(title, p.title);
-    if (s > bestSim) {
-      bestSim = s;
-      best = p;
-    }
-  }
-  return best;
+  return pickBestByTitle(title, items, parseCrossRef);
 }
 
 // ============================================================
 // OpenAlex
 // ============================================================
 
-function reconstructAbstract(inv: any): string {
+interface OpenAlexWork {
+  id?: string;
+  title?: string;
+  display_name?: string;
+  authorships?: { author?: { display_name?: string } }[];
+  primary_location?: { source?: { display_name?: string } };
+  biblio?: {
+    volume?: string;
+    issue?: string;
+    first_page?: string;
+    last_page?: string;
+  };
+  publication_year?: number;
+  publication_date?: string;
+  doi?: string;
+  abstract_inverted_index?: Record<string, number[]>;
+  type?: string;
+}
+
+export function reconstructAbstract(
+  inv: Record<string, number[]> | null | undefined,
+): string {
   if (!inv) return "";
   const words: string[] = [];
   for (const [w, positions] of Object.entries(inv)) {
-    for (const p of positions as number[]) words[p] = w;
+    for (const p of positions) words[p] = w;
   }
   return words.join(" ").replace(/\s+/g, " ").trim();
 }
 
-function parseOpenAlex(w: any): SourceRecord | null {
+function parseOpenAlex(
+  w: OpenAlexWork | null | undefined,
+): SourceRecord | null {
   if (!w || !w.id) return null;
-  const authors = (w.authorships || []).map((a: any) => {
-    const dn = (a.author && a.author.display_name) || "";
-    const parts = dn.split(" ");
-    return {
-      firstName: parts.slice(0, -1).join(" "),
-      lastName: parts.slice(-1)[0] || "",
-    };
-  });
+  const authors: SourceAuthor[] = (w.authorships || []).map((a) =>
+    splitDisplayName((a.author && a.author.display_name) || ""),
+  );
   const host = w.primary_location && w.primary_location.source;
   const b = w.biblio || {};
   const pages = b.first_page
@@ -109,7 +161,9 @@ function parseOpenAlex(w: any): SourceRecord | null {
     title: w.title || w.display_name || "",
     authors,
     publicationTitle: (host && host.display_name) || "",
-    date: w.publication_year ? String(w.publication_year) : "",
+    date:
+      w.publication_date ||
+      (w.publication_year ? String(w.publication_year) : ""),
     volume: b.volume || "",
     issue: b.issue || "",
     pages,
@@ -126,44 +180,44 @@ export async function queryOpenAlex(
 ): Promise<SourceRecord | null> {
   const mail = `mailto=${encodeURIComponent(config.contactEmail)}`;
   if (mode === "doi") {
-    const url = `https://api.openalex.org/works/doi:${encodeURIComponent(
-      idOrTitle,
-    )}?${mail}`;
-    return parseOpenAlex(await httpJSON(url));
+    const url = `https://api.openalex.org/works/doi:${encodeURIComponent(idOrTitle)}?${mail}`;
+    return parseOpenAlex(await http<OpenAlexWork>(config, url));
   }
   const url = `https://api.openalex.org/works?filter=title.search:${encodeURIComponent(
     idOrTitle,
   )}&per_page=3&${mail}`;
-  const data = await httpJSON(url);
-  const results = (data && data.results) || [];
-  if (!results.length) return null;
-  let best: SourceRecord | null = null;
-  let bestSim = 0;
-  for (const w of results) {
-    const p = parseOpenAlex(w);
-    if (!p) continue;
-    const s = similarity(idOrTitle, p.title);
-    if (s > bestSim) {
-      bestSim = s;
-      best = p;
-    }
-  }
-  return best;
+  const data = await http<{ results?: OpenAlexWork[] }>(config, url);
+  return pickBestByTitle(
+    idOrTitle,
+    (data && data.results) || [],
+    parseOpenAlex,
+  );
 }
 
 // ============================================================
 // Semantic Scholar
 // ============================================================
 
-function parseS2(p: any): SourceRecord | null {
+interface S2Paper {
+  title?: string;
+  authors?: { name?: string }[];
+  publicationVenue?: { name?: string };
+  venue?: string;
+  journal?: { name?: string; volume?: string; pages?: string };
+  year?: number;
+  publicationDate?: string;
+  externalIds?: { DOI?: string };
+  abstract?: string;
+}
+
+const S2_FIELDS =
+  "title,abstract,year,publicationDate,venue,publicationVenue,externalIds,authors,journal";
+
+function parseS2(p: S2Paper | null | undefined): SourceRecord | null {
   if (!p || !p.title) return null;
-  const authors = (p.authors || []).map((a: any) => {
-    const parts = (a.name || "").split(" ");
-    return {
-      firstName: parts.slice(0, -1).join(" "),
-      lastName: parts.slice(-1)[0] || "",
-    };
-  });
+  const authors: SourceAuthor[] = (p.authors || []).map((a) =>
+    splitDisplayName(a.name || ""),
+  );
   const j = p.journal || {};
   return {
     source: "semanticscholar",
@@ -174,7 +228,7 @@ function parseS2(p: any): SourceRecord | null {
       p.venue ||
       j.name ||
       "",
-    date: p.year ? String(p.year) : "",
+    date: p.publicationDate || (p.year ? String(p.year) : ""),
     volume: j.volume || "",
     issue: "",
     pages: j.pages || "",
@@ -189,8 +243,6 @@ export async function queryS2(
   id: string,
   mode: "arxiv" | "doi" | "title",
 ): Promise<SourceRecord | null> {
-  const fields =
-    "title,abstract,year,venue,publicationVenue,externalIds,authors,journal";
   const headers = config.s2ApiKey
     ? { "x-api-key": config.s2ApiKey }
     : undefined;
@@ -198,52 +250,41 @@ export async function queryS2(
     const key = mode === "arxiv" ? `arXiv:${id}` : `DOI:${id}`;
     const url = `https://api.semanticscholar.org/graph/v1/paper/${encodeURIComponent(
       key,
-    )}?fields=${fields}`;
-    return parseS2(await httpJSON(url, headers));
+    )}?fields=${S2_FIELDS}`;
+    return parseS2(await http<S2Paper>(config, url, headers));
   }
   const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(
     id,
-  )}&limit=3&fields=${fields}`;
-  const data = await httpJSON(url, headers);
-  const arr = (data && data.data) || [];
-  if (!arr.length) return null;
-  let best: SourceRecord | null = null;
-  let bestSim = 0;
-  for (const p of arr) {
-    const parsed = parseS2(p);
-    if (!parsed) continue;
-    const s = similarity(id, parsed.title);
-    if (s > bestSim) {
-      bestSim = s;
-      best = parsed;
-    }
-  }
-  return best;
+  )}&limit=3&fields=${S2_FIELDS}`;
+  const data = await http<{ data?: S2Paper[] }>(config, url, headers);
+  return pickBestByTitle(id, (data && data.data) || [], parseS2);
 }
 
 // ============================================================
 // DBLP
 // ============================================================
 
-function parseDBLP(info: any): SourceRecord {
-  const authors = info.authors && info.authors.author;
-  const authorList = Array.isArray(authors)
-    ? authors
-    : authors
-      ? [authors]
-      : [];
+interface DBLPInfo {
+  authors?: { author?: unknown };
+  title?: string;
+  venue?: string;
+  year?: string;
+  volume?: string;
+  pages?: string;
+  doi?: string;
+  type?: string;
+}
+
+function parseDBLP(info: DBLPInfo): SourceRecord {
+  const a = info.authors && info.authors.author;
+  const authorList = Array.isArray(a) ? a : a ? [a] : [];
   return {
     source: "dblp",
     title: (info.title || "").replace(/\.$/, ""),
-    authors: authorList.map((a: any) => {
-      const name = typeof a === "string" ? a : a.text || "";
-      // 去掉 DBLP 同名后缀 "0001" / strip DBLP homonym suffix "0001".
-      const cleanName = name.replace(/\s+\d{4}$/, "");
-      const parts = cleanName.split(" ");
-      return {
-        firstName: parts.slice(0, -1).join(" "),
-        lastName: parts.slice(-1)[0] || "",
-      };
+    authors: authorList.map((entry: any) => {
+      const name = typeof entry === "string" ? entry : entry?.text || "";
+      // 去掉 DBLP 同名后缀 "0001" 再拆名 / strip homonym suffix then split.
+      return splitDisplayName(name.replace(/\s+\d{4}$/, ""));
     }),
     publicationTitle: info.venue || "",
     date: info.year || "",
@@ -257,24 +298,20 @@ function parseDBLP(info: any): SourceRecord {
 }
 
 export async function queryDBLP(
-  _config: RunConfig,
+  config: RunConfig,
   title: string,
 ): Promise<SourceRecord | null> {
   const url = `https://dblp.org/search/publ/api?q=${encodeURIComponent(
     title,
   )}&format=json&h=5`;
-  const data = await httpJSON(url);
+  const data = await http<{
+    result?: { hits?: { hit?: { info?: DBLPInfo }[] } };
+  }>(config, url);
   const hits = data && data.result && data.result.hits && data.result.hits.hit;
   if (!hits || !hits.length) return null;
-  let best: any = null;
-  let bestSim = 0;
-  for (const h of hits) {
-    const info = h.info || {};
-    const s = similarity(title, (info.title || "").replace(/\.$/, ""));
-    if (s > bestSim) {
-      bestSim = s;
-      best = info;
-    }
-  }
-  return best ? parseDBLP(best) : null;
+  return pickBestByTitle(
+    title,
+    hits.map((h) => h.info || {}),
+    (info) => parseDBLP(info),
+  );
 }

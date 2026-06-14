@@ -13,6 +13,7 @@ pref-backupToExtra =
 group-matching = Matching & rate limit
 pref-threshold = Title similarity threshold (0–1)
 pref-delay = Delay between API calls (ms)
+pref-maxItems = Max items per collection/library run
 
 group-sources = Data sources
 pref-useCrossref =

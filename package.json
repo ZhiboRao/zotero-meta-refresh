@@ -1,7 +1,7 @@
 {
   "name": "zotero-meta-refresh",
   "type": "module",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Batch-refresh Zotero item metadata from CrossRef, OpenAlex, Semantic Scholar and DBLP, with a preview-confirm flow, field whitelist, preprint upgrade and old-value backup to Extra.",
   "config": {
     "addonName": "Zotero Metadata Refresh",
@@ -25,6 +25,7 @@
     "lint:fix": "prettier --write . && eslint . --fix",
     "release": "zotero-plugin release",
     "test": "zotero-plugin test",
+    "test:unit": "NODE_OPTIONS='--import tsx' mocha 'test/unit/**/*.test.ts'",
     "update-deps": "npm update --save"
   },
   "dependencies": {
@@ -39,6 +40,7 @@
     "eslint": "^9.39.2",
     "mocha": "^11.7.5",
     "prettier": "^3.7.4",
+    "tsx": "^4.22.4",
     "typescript": "^5.9.3",
     "zotero-plugin-scaffold": "^0.8.2",
     "zotero-types": "^4.1.0-beta.4"

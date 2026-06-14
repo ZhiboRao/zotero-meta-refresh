@@ -17,6 +17,9 @@ pref("titleSimilarityThreshold", "0.85");
 // 请求间隔毫秒。同样以字符串存储,避免 int 偏好与输入框的类型耦合。
 // Delay (ms). Stored as string too, to avoid int-pref/input coercion issues.
 pref("delayMs", "1200");
+// 集合/整库范围一次最多处理多少条(安全上限,字符串存储)。
+// Safety cap for collection/library scope (stored as string).
+pref("maxItems", "200");
 
 // —— 数据源开关 / Data-source toggles ——
 pref("useCrossref", true);

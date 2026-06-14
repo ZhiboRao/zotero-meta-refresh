@@ -35,12 +35,24 @@ whitelist, preprint upgrade and old-value backup.
    **Select** the items to refresh in the item list (multi-select OK).
 2. **右键** → `刷新元数据(预览)… / Refresh metadata (preview)…`。
 3. 插件按白名单与多源 fallback **查询**(底部进度条),全部查完后弹出**预览对话框**:
-   逐条列出 `字段: 旧值 → 新值` 与作者变更,并汇总「将更新 / 无变化 / 未找到 / 跳过」。
-4. 核对无误后点 **`应用更新 / Apply`** 才真正写回;点 `取消` 则什么都不改。
-   Click **Apply** to write the changes; **Cancel** changes nothing.
+   逐条列出 `字段: 旧值 → 新值` 与作者变更,**每条前有复选框可单独取消**;汇总「将更新 /
+   无变化 / 未找到 / 跳过 / 限流」。
+4. 核对无误后点 **`应用更新 / Apply`** 才真正写回(只写勾选的);点 `取消` 则什么都不改。
+   Click **Apply** to write the (checked) changes; **Cancel** changes nothing.
 
 > 不再需要原脚本里「先 `dryRun:true` 跑、再改 `false` 重跑」那一套 —— 预览即干跑,确认即应用。
 > No more "set dryRun:true, then flip to false and rerun" — the preview _is_ the dry run.
+
+**范围 / Scopes:** 除了选中条目,还可在**集合右键**「刷新本集合…」、或**工具菜单**
+「刷新整个文献库…」批量处理(带数量与耗时预估确认,受设置里的上限保护)。
+Besides selected items, use the **collection** right-click or the **Tools menu**
+to refresh a whole collection / library (with a count + time-estimate confirm and
+an item cap).
+
+**撤销 / Undo:** 选中条目 → 右键「从 MetaRefresh 备份恢复…」可回滚最近一次刷新
+(从 Extra 备份按 LIFO 恢复字段与作者)。
+Right-click selected items → "Restore from MetaRefresh backup…" to undo the latest
+refresh (restores fields and creators from the Extra backup, LIFO).
 
 > **联系邮箱提醒 / Contact-email reminder:** 默认不内置任何邮箱。若启用了 CrossRef /
 > OpenAlex 又没在设置里填邮箱,运行刷新时会弹出提醒(可继续也可取消)。邮箱用于这两个
@@ -61,14 +73,11 @@ whitelist, preprint upgrade and old-value backup.
 
 > 真跑前仍建议备份 `~/Zotero/zotero.sqlite`。被覆盖字段的旧值会写入条目 Extra,可回溯。
 
-## 界面截图 / Screenshots
+界面与详细用法见 **[doc/USAGE.md](doc/USAGE.md)**;版本变化见 **[CHANGELOG.md](CHANGELOG.md)**。
+See **[doc/USAGE.md](doc/USAGE.md)** for a full walkthrough and **[CHANGELOG.md](CHANGELOG.md)** for changes.
 
-> 截图请放在 `doc/images/` 下并按下列文件名命名即可显示。
-> Drop screenshots into `doc/images/` with the names below to display them.
-
-| 预览对话框 / Preview dialog        | 设置面板 / Settings pane             |
-| ---------------------------------- | ------------------------------------ |
-| ![preview](doc/images/preview.png) | ![settings](doc/images/settings.png) |
+> 想加截图,可把图放进 `doc/images/` 并在 USAGE 里引用。
+> To add screenshots, drop images into `doc/images/` and reference them in USAGE.
 
 ---
 
@@ -109,15 +118,16 @@ npm run lint:fix            # prettier --write + eslint --fix
 3. 更新 `release` tag 上的 `update.json`(指向新版 xpi),Zotero 即可推送更新。
    或直接 `npm run release` 让 scaffold 自动完成第 2–3 步。
 
-### 网络注意 / Network note
+### 安装注意 / Install note
 
-本机 npm 默认走 `mirrors.huaweicloud.com`,安装时该镜像会重置连接(ECONNRESET)导致 npm 崩溃。
-解决:用 npmmirror 一次性安装,并把 GitHub 的 git 依赖从 ssh 改走 https(`zotero-types` 间接依赖
-`zotero/epub.js` 是 git 依赖):
+`zotero-types` 间接依赖 `zotero/epub.js`(声明为 git+ssh)。若你的环境无法用 ssh 访问
+GitHub,先把它改走 https 再安装:
+`zotero-types` pulls `zotero/epub.js` as a git+ssh dependency. If your environment
+can't reach GitHub over ssh, rewrite it to https before installing:
 
 ```bash
 git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
-npm install --registry https://registry.npmmirror.com/
+npm install
 ```
 
 ---

@@ -7,13 +7,9 @@
 import { getString, initLocale } from "./utils/locale";
 import { createZToolkit } from "./utils/ztoolkit";
 import { registerPrefsScripts } from "./modules/preferenceScript";
-import { registerRefreshMenu } from "./modules/metarefresh/ui";
+import { registerMenus } from "./modules/metarefresh/ui";
 
-/**
- * 注册偏好设置面板。
- *
- * Register the preferences pane.
- */
+/** 注册偏好设置面板 / Register the preferences pane. */
 function registerPrefs(): void {
   Zotero.PreferencePanes.register({
     pluginID: addon.data.config.addonID,
@@ -23,7 +19,7 @@ function registerPrefs(): void {
   });
 }
 
-/** 启动一次 / Runs once on plugin load. */
+/** 启动一次:建 ztoolkit、注册偏好面板与菜单(全局,一次即可)。 */
 async function onStartup() {
   await Promise.all([
     Zotero.initializationPromise,
@@ -32,32 +28,28 @@ async function onStartup() {
   ]);
 
   initLocale();
+  // ztoolkit 与菜单都是全局的,启动时建一次即可,无需每窗口重复。
+  // ztoolkit and menus are global; create/register once at startup.
+  addon.data.ztoolkit = createZToolkit();
   registerPrefs();
+  registerMenus();
 
-  await Promise.all(
-    Zotero.getMainWindows().map((win) => onMainWindowLoad(win)),
-  );
-
-  // 供插件外部(如 scaffold 测试)确认加载完成。
-  // Confirms load completion for code outside the plugin (e.g. scaffold tests).
   addon.data.initialized = true;
 }
 
-/** 每个主窗口加载时 / Runs for each main window. */
+/** 每个主窗口加载时:菜单已全局注册,这里无需重复操作。 */
 
 async function onMainWindowLoad(_win: _ZoteroTypes.MainWindow): Promise<void> {
-  addon.data.ztoolkit = createZToolkit();
-  registerRefreshMenu();
+  // no-op: menus/ztoolkit registered globally in onStartup.
 }
 
-/** 主窗口卸载时 / Runs when a main window unloads. */
+/** 主窗口卸载时:仅关闭可能开着的对话框,不在此注销全局菜单。 */
 
 async function onMainWindowUnload(_win: Window): Promise<void> {
-  ztoolkit.unregisterAll();
   addon.data.dialog?.window?.close();
 }
 
-/** 插件关闭 / Plugin shutdown. */
+/** 插件关闭:在此统一注销 / unregister everything on shutdown only. */
 function onShutdown(): void {
   ztoolkit.unregisterAll();
   addon.data.dialog?.window?.close();
@@ -66,11 +58,7 @@ function onShutdown(): void {
   delete Zotero[addon.data.config.addonInstance];
 }
 
-/**
- * 偏好面板事件分发(XHTML 的 onload 会回调到这里)。
- *
- * Preference-pane event dispatch (the XHTML onload calls back here).
- */
+/** 偏好面板事件分发(XHTML 的 onload 回调到这里)。 */
 async function onPrefsEvent(type: string, data: { [key: string]: any }) {
   switch (type) {
     case "load":

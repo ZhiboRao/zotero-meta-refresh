@@ -45,6 +45,93 @@ async function runPool<T>(
   await Promise.all(Array.from({ length: lanes }, () => run()));
 }
 
+/**
+ * 查询阶段(可取消)。用一个无模态对话框显示进度并提供「取消」按钮;
+ * 取消后正在处理中的少数条目会跑完,但不再领取新条目,然后整轮中止。
+ *
+ * Cancellable query phase. A modeless dialog shows progress and a Cancel button;
+ * on cancel, the few in-flight items finish but no new items are picked up, and
+ * the whole run aborts.
+ */
+async function runQueryWithCancel(
+  items: Zotero.Item[],
+  cfg: RunConfig,
+): Promise<{ plans: ItemPlan[]; cancelled: boolean; processedCount: number }> {
+  const total = items.length;
+  const state = { cancelled: false };
+  const dialogData: { [k: string]: any } = {};
+  const dialog = new ztoolkit.Dialog(1, 1)
+    .addCell(0, 0, {
+      tag: "div",
+      namespace: "html",
+      id: "mr-query-status",
+      properties: { innerHTML: `查询中 0/${total} / Querying…` },
+      styles: {
+        minWidth: "320px",
+        padding: "12px 10px",
+        fontSize: "13px",
+        fontFamily: "sans-serif",
+      },
+    })
+    .addButton("取消 / Cancel", "cancel", {
+      callback: () => {
+        state.cancelled = true;
+      },
+    });
+  dialog.setDialogData(dialogData).open("元数据刷新 / Refreshing", {
+    width: 420,
+    height: 150,
+    centerscreen: true,
+    resizable: false,
+  });
+  addon.data.dialog = dialog;
+
+  const setStatus = (text: string) => {
+    try {
+      const el = (dialog as any).window?.document?.getElementById(
+        "mr-query-status",
+      );
+      if (el) el.textContent = text;
+    } catch {
+      /* window may be closing */
+    }
+  };
+
+  const cache: QueryCache = new Map();
+  const plans: ItemPlan[] = new Array(total);
+  let completed = 0;
+  await runPool(items, cfg.concurrency, async (item, i) => {
+    if (state.cancelled) return; // 不再领取新条目 / stop picking up new items.
+    try {
+      plans[i] = await computePlan(item, cfg, cache);
+    } catch (e: any) {
+      plans[i] = {
+        item,
+        title: item.getField("title") || "(无标题)",
+        status: "error",
+        reason: e?.message || String(e),
+        fields: [],
+        authors: null,
+        queryLog: [`异常 / error: ${e?.message || e}`],
+      };
+    }
+    completed++;
+    setStatus(`查询中 ${completed}/${total} / Querying…`);
+  });
+
+  try {
+    (dialog as any).window?.close();
+  } catch {
+    /* already closed by the Cancel button */
+  }
+  addon.data.dialog = undefined;
+  return {
+    plans: plans.filter((p): p is ItemPlan => !!p),
+    cancelled: state.cancelled,
+    processedCount: completed,
+  };
+}
+
 /** 打开本插件的偏好面板(尽力而为)/ open this plugin's prefs pane (best-effort). */
 function openSettings(): void {
   try {
@@ -371,46 +458,15 @@ export async function runRefresh(scope: RefreshScope): Promise<void> {
     if (!remindEmail(win)) return;
   }
 
-  // 查询阶段 / query phase.
-  const progress = new ztoolkit.ProgressWindow(config.addonName, {
-    closeOnClick: false,
-    closeTime: -1,
-  })
-    .createLine({
-      text: `查询中 0/${items.length} / Querying`,
-      type: "default",
-      progress: 0,
-    })
-    .show();
-
-  // 有界并发处理:每条按索引写回保持顺序;按 host 节流仍生效,故不会突破限流。
-  // Bounded-concurrency processing: results written by index (order preserved);
-  // per-host throttling still applies, so concurrency won't exceed rate limits.
-  const cache: QueryCache = new Map();
-  const plans: ItemPlan[] = new Array(items.length);
-  let completed = 0;
-  await runPool(items, cfg.concurrency, async (item, i) => {
-    try {
-      plans[i] = await computePlan(item, cfg, cache);
-    } catch (e: any) {
-      plans[i] = {
-        item,
-        title: item.getField("title") || "(无标题)",
-        status: "error",
-        reason: e?.message || String(e),
-        fields: [],
-        authors: null,
-        queryLog: [`异常 / error: ${e?.message || e}`],
-      };
-    }
-    completed++;
-    progress.changeLine({
-      text: `查询中 ${completed}/${items.length} / Querying`,
-      progress: Math.round((completed / items.length) * 100),
-    });
-  });
-  progress.changeLine({ text: "查询完成 / done", progress: 100 });
-  progress.startCloseTimer(1200);
+  // 查询阶段(带「取消」按钮,选多了可随时中止)/ cancellable query phase.
+  const { plans, cancelled, processedCount } = await runQueryWithCancel(
+    items,
+    cfg,
+  );
+  if (cancelled) {
+    popup(`已取消查询 / Query cancelled (${processedCount}/${items.length})`);
+    return;
+  }
 
   const updatable = plans.filter((p) => p.status === "would_update");
   const { apply, excluded } = await showPreviewDialog(plans, updatable);

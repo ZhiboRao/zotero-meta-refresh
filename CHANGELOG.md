@@ -4,6 +4,16 @@
 [语义化版本](https://semver.org/lang/zh-CN/)。
 Format based on Keep a Changelog; this project adheres to Semantic Versioning.
 
+## [0.2.2] - 2026-06-14
+
+### Added / 新增
+
+- 查询阶段新增**「取消」按钮**(无模态进度对话框):选多了、或想中止时随时可停;
+  正在处理中的少数条目会跑完,之后整轮中止。
+  A **Cancel** button during the query phase (modeless dialog): stop a run
+  anytime (e.g. when too many items were selected). In-flight items finish; no
+  new items are picked up and the run aborts.
+
 ## [0.2.1] - 2026-06-14
 
 ### Added / 新增

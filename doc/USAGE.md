@@ -25,8 +25,10 @@ field. Nothing is written until you confirm a **preview**.
 1. **选中条目** / Select items — 在中间的条目列表里选一条或多条(常规条目;附件、
    笔记会被自动忽略)。
 2. **右键 → 刷新元数据(预览)…** / Right-click → _Refresh metadata (preview)…_
-3. **查询** / Query — 底部进度条显示 `查询中 i/N`。网络较慢,每条之间有节流间隔
-   (默认 1200 ms),几十条可能要一两分钟。
+3. **查询** / Query — 弹出一个带进度的小窗口 `查询中 i/N`,上面有**「取消」按钮**:
+   选多了或想中止时随时可停(正在处理中的少数条目会跑完,之后整轮中止)。网络较慢,
+   每条之间按 host 节流,几十条可能要一会儿。
+   A small dialog shows `Querying i/N` with a **Cancel** button — stop anytime.
 4. **预览对话框** / Preview dialog — 列出每条将要发生的变化:
    - 顶部汇总:`将更新 / 无变化 / 未找到 / 跳过(中文)`。
    - 每条:`字段: 旧值 → 新值`(红色删除线是旧值,绿色是新值),以及作者变更。

@@ -66,8 +66,8 @@ whitelist, preprint upgrade and old-value backup.
 > 截图请放在 `doc/images/` 下并按下列文件名命名即可显示。
 > Drop screenshots into `doc/images/` with the names below to display them.
 
-| 预览对话框 / Preview dialog | 设置面板 / Settings pane |
-| --- | --- |
+| 预览对话框 / Preview dialog        | 设置面板 / Settings pane             |
+| ---------------------------------- | ------------------------------------ |
 | ![preview](doc/images/preview.png) | ![settings](doc/images/settings.png) |
 
 ---
@@ -84,18 +84,18 @@ npm run lint:fix            # prettier --write + eslint --fix
 
 源码结构 / Source layout:
 
-| 路径 | 作用 / Role |
-| --- | --- |
-| `src/hooks.ts` | 生命周期:注册偏好面板、注册右键菜单 / lifecycle: prefs pane + context menu |
-| `src/modules/metarefresh/types.ts` | 共享类型 / shared types |
-| `src/modules/metarefresh/utils.ts` | 相似度 / arXiv 提取 / `Zotero.HTTP` JSON |
-| `src/modules/metarefresh/sources.ts` | 四个数据源的查询与归一化 / source adapters |
-| `src/modules/metarefresh/engine.ts` | 读配置、取条目、`computePlan`(干跑)、`applyPlan`(写回) |
-| `src/modules/metarefresh/ui.ts` | 右键入口、查询进度、预览对话框、确认后应用 |
-| `src/modules/preferenceScript.ts` | 偏好面板脚本(控件靠 `preference=` 自动同步) |
-| `addon/prefs.js` | 默认偏好(构建时自动加前缀 `extensions.zotero.metarefresh.*`) |
-| `addon/content/preferences.xhtml` | 偏好面板 UI |
-| `addon/locale/*/` | Fluent 本地化(en-US / zh-CN) |
+| 路径                                 | 作用 / Role                                                                |
+| ------------------------------------ | -------------------------------------------------------------------------- |
+| `src/hooks.ts`                       | 生命周期:注册偏好面板、注册右键菜单 / lifecycle: prefs pane + context menu |
+| `src/modules/metarefresh/types.ts`   | 共享类型 / shared types                                                    |
+| `src/modules/metarefresh/utils.ts`   | 相似度 / arXiv 提取 / `Zotero.HTTP` JSON                                   |
+| `src/modules/metarefresh/sources.ts` | 四个数据源的查询与归一化 / source adapters                                 |
+| `src/modules/metarefresh/engine.ts`  | 读配置、取条目、`computePlan`(干跑)、`applyPlan`(写回)                     |
+| `src/modules/metarefresh/ui.ts`      | 右键入口、查询进度、预览对话框、确认后应用                                 |
+| `src/modules/preferenceScript.ts`    | 偏好面板脚本(控件靠 `preference=` 自动同步)                                |
+| `addon/prefs.js`                     | 默认偏好(构建时自动加前缀 `extensions.zotero.metarefresh.*`)               |
+| `addon/content/preferences.xhtml`    | 偏好面板 UI                                                                |
+| `addon/locale/*/`                    | Fluent 本地化(en-US / zh-CN)                                               |
 
 > 控制台脚本里的 `fetch()` 已替换为 **`Zotero.HTTP.request()`** —— 插件沙箱里跨域 `fetch`
 > 可能被 CSP/CORS 拦截,而 `Zotero.HTTP` 是官方特权跨域通道。

@@ -1,13 +1,14 @@
 name: Release
 
-# 仅在推送 vX.Y.Z 标签时触发,构建并把 xpi + update.json 发布到 GitHub Release。
+# 手动触发(Actions 页面运行),构建并把 xpi + update.json 发布到 GitHub Release。
 # 由 zotero-plugin-scaffold 的 release 命令完成(读取 package.json 版本)。
-# Triggered only by pushing a vX.Y.Z tag: builds and publishes xpi + update.json
-# via zotero-plugin-scaffold's release command (uses the package.json version).
+# 默认设为手动触发以免与手动建 Release 冲突;确认 `npm run release` 行为符合预期后,
+# 可改成 `on: push: tags: ['v*']` 实现「推 tag 即发布」。
+# Manual trigger (run from the Actions tab): builds and publishes xpi +
+# update.json via zotero-plugin-scaffold's release command. Manual by default to
+# avoid clobbering a hand-made release; once you've confirmed `npm run release`
+# behaves, switch to `on: push: tags: ['v*']` for tag-triggered publishing.
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
 
 permissions:

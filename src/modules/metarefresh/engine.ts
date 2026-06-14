@@ -23,9 +23,14 @@ import {
   SourceRecord,
   TransportError,
 } from "./types";
-import { extractArxivId, hasChinese, similarity, sleep } from "./utils";
+import {
+  extractArxivId,
+  hasChinese,
+  matchConfidence,
+  similarity,
+} from "./utils";
 
-export type RefreshScope = "selected" | "collection" | "library";
+export type RefreshScope = "selected" | "collection" | "library" | "search";
 
 /**
  * 每轮查询缓存:存 Promise 以便并发时同 key 的请求去重(只发一次)。
@@ -67,6 +72,7 @@ export function readConfig(): RunConfig {
     upgradePreprints: Boolean(getPref("upgradePreprints")),
     skipChinese: Boolean(getPref("skipChinese")),
     backupToExtra: Boolean(getPref("backupToExtra")),
+    fillEmptyOnly: Boolean(getPref("fillEmptyOnly")),
     titleSimilarityThreshold: threshold,
     delayMs: Number.isFinite(delayMs) ? delayMs : 1200,
     contactEmail: String(getPref("contactEmail") || ""),
@@ -86,7 +92,16 @@ export function readConfig(): RunConfig {
   };
 }
 
-/** 按范围收集要处理的常规、可编辑、未删除条目 / gather regular editable items. */
+/** 递归收集集合及其子集合的条目 / collect items from a collection + subcollections. */
+function collectItemsRecursive(col: any): Zotero.Item[] {
+  const out: Zotero.Item[] = (col.getChildItems() as Zotero.Item[]) || [];
+  for (const child of (col.getChildCollections() as any[]) || []) {
+    out.push(...collectItemsRecursive(child));
+  }
+  return out;
+}
+
+/** 按范围收集要处理的常规、可编辑、未删除条目(去重)/ gather regular editable items. */
 export async function gatherItems(scope: RefreshScope): Promise<Zotero.Item[]> {
   const pane = Zotero.getActiveZoteroPane();
   let items: Zotero.Item[] = [];
@@ -94,19 +109,34 @@ export async function gatherItems(scope: RefreshScope): Promise<Zotero.Item[]> {
     items = pane ? pane.getSelectedItems() : [];
   } else if (scope === "collection") {
     const col = pane ? pane.getSelectedCollection() : undefined;
-    items = col ? (col.getChildItems() as Zotero.Item[]) : [];
+    if (col) {
+      items = getPref("recurseCollections")
+        ? collectItemsRecursive(col)
+        : (col.getChildItems() as Zotero.Item[]);
+    }
+  } else if (scope === "search") {
+    // 保存的检索:跑检索拿到命中的条目 id 再取条目。
+    // Saved search: run it to get matching ids, then fetch the items.
+    const search = (pane as any)?.getSelectedSavedSearch?.();
+    if (search) {
+      const ids = (await search.search()) as number[];
+      items = (await Zotero.Items.getAsync(ids)) as Zotero.Item[];
+    }
   } else if (scope === "library") {
     items = (await Zotero.Items.getAll(
       Zotero.Libraries.userLibraryID,
     )) as Zotero.Item[];
   }
+
+  const seen = new Set<number>();
   return (items || []).filter(
     (it) =>
       it &&
       it.isRegularItem &&
       it.isRegularItem() &&
       !(it as any).deleted &&
-      (typeof it.isEditable !== "function" || it.isEditable()),
+      (typeof it.isEditable !== "function" || it.isEditable()) &&
+      (seen.has(it.id) ? false : (seen.add(it.id), true)),
   );
 }
 
@@ -167,6 +197,8 @@ export async function computePlan(
 
   let metadata: SourceRecord | null = null;
   let transport = false; // 是否遇到限流/网络错误 / hit rate-limit/network error
+  let matchedExact = false; // 采用的是否精确 ID 命中 / adopted via exact id
+  let matchSim = 0; // 采用时的标题相似度 / similarity at adoption
   const doi = item.getField("DOI");
   const arxivId = extractArxivId(item);
   const queryLog = plan.queryLog;
@@ -206,9 +238,12 @@ export async function computePlan(
         if (exact) {
           queryLog.push(`${name}: ✓ 命中(精确 ID, sim=${sim.toFixed(2)})`);
           metadata = result;
+          matchedExact = true;
+          matchSim = sim;
         } else if (sim >= config.titleSimilarityThreshold) {
           queryLog.push(`${name}: ✓ 命中 (sim=${sim.toFixed(2)})`);
           metadata = result;
+          matchSim = sim;
         } else {
           queryLog.push(
             `${name}: ✗ 相似度不足 (sim=${sim.toFixed(2)}) "${result.title.slice(0, 50)}"`,
@@ -337,6 +372,8 @@ export async function computePlan(
     const oldVal = String(item.getField(field) || "");
     const nv = String(newVal).trim();
     if (oldVal.trim() === nv) continue;
+    // 只填空模式:已有非空值则不动 / fill-empty mode: never touch a non-empty field.
+    if (config.fillEmptyOnly && oldVal.trim() !== "") continue;
     // 日期:已有精确日期(同年含月)时,不被纯年份覆盖。
     if (
       field === "date" &&
@@ -351,30 +388,42 @@ export async function computePlan(
   plan.fields = planned;
 
   // 作者:仅在姓氏有合理重叠(或原本无作者)时才计划覆盖,避免误配清空作者。
-  // Authors: only plan an overwrite when surnames overlap (or there were none),
-  // so a mismatched record can't wipe a correct author list.
-  if (config.updateAuthors && meta.authors && meta.authors.length) {
+  // 姓氏重叠也用于置信度计算。
+  // Authors: only overwrite when surnames overlap (or there were none); the
+  // overlap also feeds the confidence score.
+  let surnameOverlap = -1;
+  if (meta.authors && meta.authors.length) {
     const atid = authorTypeID();
     const oldCreators = item.getCreators() as any[];
     const oldAuthors = oldCreators.filter((c) => c.creatorTypeID === atid);
-    const oldC = oldCreators
-      .map((c) => `${c.firstName || ""} ${c.lastName || ""}`.trim())
-      .join("; ");
-    const newC = meta.authors
-      .map((a) => `${a.firstName} ${a.lastName}`.trim())
-      .join("; ");
-    const risky =
-      oldAuthors.length > 0 &&
-      overlapRatio(surnameSet(oldAuthors), surnameSet(meta.authors)) < 0.34;
-    if (oldC !== newC && !risky) {
-      plan.authors = { oldC, newC, list: meta.authors } as AuthorPlan;
-    } else if (risky) {
-      queryLog.push(
-        "作者: ✗ 姓氏重叠过低,跳过覆盖 / authors skipped (low overlap)",
+    if (oldAuthors.length) {
+      surnameOverlap = overlapRatio(
+        surnameSet(oldAuthors),
+        surnameSet(meta.authors),
       );
+    }
+    if (config.updateAuthors) {
+      // 只填空模式:仅在原本无作者时才填 / fill-empty: only when there were none.
+      const allowed = !config.fillEmptyOnly || oldAuthors.length === 0;
+      const oldC = oldCreators
+        .map((c) => `${c.firstName || ""} ${c.lastName || ""}`.trim())
+        .join("; ");
+      const newC = meta.authors
+        .map((a) => `${a.firstName} ${a.lastName}`.trim())
+        .join("; ");
+      const risky =
+        oldAuthors.length > 0 && surnameOverlap >= 0 && surnameOverlap < 0.34;
+      if (allowed && oldC !== newC && !risky) {
+        plan.authors = { oldC, newC, list: meta.authors } as AuthorPlan;
+      } else if (risky) {
+        queryLog.push(
+          "作者: ✗ 姓氏重叠过低,跳过覆盖 / authors skipped (low overlap)",
+        );
+      }
     }
   }
 
+  plan.confidence = matchConfidence(matchedExact, matchSim, surnameOverlap);
   plan.status = planned.length || plan.authors ? "would_update" : "nochange";
   return plan;
 }

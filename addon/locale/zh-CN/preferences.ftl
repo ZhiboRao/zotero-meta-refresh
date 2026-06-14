@@ -9,6 +9,10 @@ pref-skipChinese =
     .label = 跳过中文文献
 pref-backupToExtra =
     .label = 把旧值备份到 Extra 字段
+pref-fillEmptyOnly =
+    .label = 只填空字段（绝不覆盖已有值）
+pref-recurseCollections =
+    .label = 集合刷新时包含子集合
 
 group-matching = 匹配与限流
 pref-threshold = 标题相似度阈值（0–1）

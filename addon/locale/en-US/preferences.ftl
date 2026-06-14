@@ -9,6 +9,10 @@ pref-skipChinese =
     .label = Skip Chinese-titled items
 pref-backupToExtra =
     .label = Back up old values to the Extra field
+pref-fillEmptyOnly =
+    .label = Fill empty fields only (never overwrite existing values)
+pref-recurseCollections =
+    .label = Collection refresh includes subcollections
 
 group-matching = Matching & rate limit
 pref-threshold = Title similarity threshold (0–1)

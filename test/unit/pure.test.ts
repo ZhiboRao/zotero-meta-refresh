@@ -9,6 +9,7 @@ import { expect } from "chai";
 import {
   extractArxivIdFromText,
   levenshtein,
+  matchConfidence,
   normalizeTitle,
   pickBestByTitle,
   similarity,
@@ -49,6 +50,22 @@ describe("similarity", () => {
     ).to.be.lt(0.85);
   });
   it("empty input → 0", () => expect(similarity("", "anything")).to.equal(0));
+});
+
+describe("matchConfidence", () => {
+  it("exact id → high regardless of similarity", () => {
+    expect(matchConfidence(true, 0.4, -1)).to.equal("high");
+  });
+  it("high similarity → high", () => {
+    expect(matchConfidence(false, 0.97, -1)).to.equal("high");
+  });
+  it("borderline similarity → low", () => {
+    expect(matchConfidence(false, 0.86, -1)).to.equal("low");
+  });
+  it("low surname overlap downgrades", () => {
+    expect(matchConfidence(false, 0.97, 0.1)).to.equal("low");
+    expect(matchConfidence(false, 0.97, 0.4)).to.equal("medium");
+  });
 });
 
 describe("splitDisplayName", () => {

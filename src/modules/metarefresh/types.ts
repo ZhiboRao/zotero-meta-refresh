@@ -84,6 +84,8 @@ export interface RunConfig {
   upgradePreprints: boolean;
   skipChinese: boolean;
   backupToExtra: boolean;
+  /** 只填空字段,绝不覆盖已有值 / only fill empty fields, never overwrite. */
+  fillEmptyOnly: boolean;
   titleSimilarityThreshold: number;
   delayMs: number;
   contactEmail: string;
@@ -138,6 +140,8 @@ export interface ItemPlan {
   fields: FieldPlan[];
   authors: AuthorPlan | null;
   queryLog: string[];
+  /** 匹配置信度 / match confidence (badge + auto-uncheck low ones). */
+  confidence?: "high" | "medium" | "low";
   /** 预览里逐条勾选状态 / per-item include toggle in the preview. */
   selected?: boolean;
 }

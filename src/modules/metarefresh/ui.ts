@@ -209,12 +209,14 @@ export function registerMenus(): void {
     label: getString("menu-restore-selected"),
     commandListener: () => void runRestore(),
   });
+  // 集合右键菜单也覆盖"保存的检索"——点击时按选中项类型分派。
+  // The collection menu also covers saved searches — dispatch by selection.
   ztoolkit.Menu.register("collection", {
     tag: "menuitem",
     id: `zotero-collectionmenu-${config.addonRef}-refresh`,
     label: getString("menu-refresh-collection"),
     icon,
-    commandListener: () => void runRefresh("collection"),
+    commandListener: () => void runCollectionOrSearch(),
   });
   ztoolkit.Menu.register("menuTools", {
     tag: "menuitem",
@@ -236,6 +238,25 @@ function esc(s: string): string {
 function trunc(s: string, n: number): string {
   const v = String(s == null ? "" : s);
   return v.length > n ? v.slice(0, n) + "…" : v;
+}
+
+/** 按选中项类型分派:保存的检索走 search,否则走 collection / dispatch by selection. */
+async function runCollectionOrSearch(): Promise<void> {
+  const pane = Zotero.getActiveZoteroPane();
+  const search = (pane as any)?.getSelectedSavedSearch?.();
+  return runRefresh(search ? "search" : "collection");
+}
+
+/** 置信度色块徽章 / a coloured confidence badge. */
+function confBadge(c?: "high" | "medium" | "low"): string {
+  if (!c) return "";
+  const map: Record<string, [string, string]> = {
+    high: ["#27ae60", "高 high"],
+    medium: ["#e67e22", "中 med"],
+    low: ["#c0392b", "低 low"],
+  };
+  const [color, label] = map[c];
+  return `<span style="display:inline-block;font-size:0.7em;color:#fff;background:${color};border-radius:3px;padding:0 5px;margin-left:6px;vertical-align:middle;">${label}</span>`;
 }
 function logHtml(lines: string[]): string {
   if (!lines || !lines.length) return "";
@@ -285,11 +306,13 @@ function buildPreviewHtml(plans: ItemPlan[], updatable: ItemPlan[]): string {
           `<span style="color:#27ae60;">${esc(trunc(p.authors.newC, 60))}</span></div>`,
       );
     }
+    // 低置信度默认不勾选,需用户主动确认 / low confidence starts unchecked.
+    const checkedAttr = p.confidence === "low" ? "" : "checked";
     blocks.push(
       `<div style="padding:6px 4px;border-bottom:1px solid #eee;">` +
         `<label style="font-weight:600;cursor:pointer;display:block;">` +
-        `<input type="checkbox" data-plan-idx="${i}" checked style="margin-right:6px;vertical-align:middle;">` +
-        `${esc(trunc(p.title, 80))}</label>` +
+        `<input type="checkbox" data-plan-idx="${i}" ${checkedAttr} style="margin-right:6px;vertical-align:middle;">` +
+        `${esc(trunc(p.title, 80))}${confBadge(p.confidence)}</label>` +
         `<div style="font-size:0.85em;color:#888;margin:2px 0 0 24px;">源=${esc(p.source || "")} · ${p.fields.length} 字段${p.authors ? " + 作者" : ""}</div>` +
         rows.join("") +
         `</div>`,

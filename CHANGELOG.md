@@ -4,6 +4,23 @@
 [语义化版本](https://semver.org/lang/zh-CN/)。
 Format based on Keep a Changelog; this project adheres to Semantic Versioning.
 
+## [0.3.0] - 2026-06-14
+
+### Added / 新增
+
+- **匹配置信度徽章**:预览里每条标 高/中/低(由 精确ID命中 + 标题相似度 + 作者姓氏
+  重叠 算出);**低置信项默认不勾选**,需主动确认才会写入 —— 隔离最可能配错的匹配。
+  Per-item **confidence badge** in the preview; low-confidence matches start
+  **unchecked** so risky (possibly wrong-paper) matches need a deliberate click.
+- **保存的检索(Saved Search)范围**:在保存的检索上右键即可刷新其命中的全部条目
+  (例如"未发表的 arXiv 预印本"这种动态集合)。集合刷新可选**递归子集合**(设置开关)。
+  **Saved-search scope** (right-click a saved search) + optional recursive
+  subcollections on collection refresh (a setting).
+- **「只填空字段」安全模式**(设置开关,默认关):只写当前为空的字段,绝不覆盖已有值;
+  适合在不想动已整理数据时做全库补全。
+  **"Fill empty fields only"** safe mode (a setting, default off): only writes
+  empty fields, never overwrites existing values.
+
 ## [0.2.2] - 2026-06-14
 
 ### Added / 新增

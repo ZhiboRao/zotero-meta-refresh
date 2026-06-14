@@ -11,6 +11,8 @@ declare namespace _ZoteroTypes {
       "upgradePreprints": boolean;
       "skipChinese": boolean;
       "backupToExtra": boolean;
+      "fillEmptyOnly": boolean;
+      "recurseCollections": boolean;
       "titleSimilarityThreshold": string;
       "delayMs": string;
       "maxItems": string;

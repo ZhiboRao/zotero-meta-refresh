@@ -40,12 +40,17 @@ field. Nothing is written until you confirm a **preview**.
 > 预览即「干跑(dry run)」,只有点了 Apply 才真正改库。
 > The preview is the dry run; only **Apply** mutates your library.
 
-**范围 / Scopes**:右键条目 = 处理**选中**;右键**集合** =「刷新本集合…」;
-**工具菜单** =「刷新整个文献库…」。后两者会先弹确认(显示条数与预计耗时),并受设置里
-`maxItems` 上限保护,避免误触整库。
-Right-click items = **selected**; right-click a **collection** = that collection;
-**Tools menu** = whole library. The latter two first confirm (item count + ETA)
-and are capped by the `maxItems` setting.
+**范围 / Scopes**:右键条目 = 处理**选中**;右键**集合或保存的检索** = 刷新其全部条目;
+**工具菜单** =「刷新整个文献库…」。后几者会先弹确认(显示条数与预计耗时),并受设置里
+`maxItems` 上限保护。保存的检索很适合做"未发表的 arXiv 预印本"这类动态集合,建一次反复刷。
+Right-click items = **selected**; right-click a **collection or saved search** =
+all its items; **Tools menu** = whole library. Saved searches are great for
+dynamic sets like "unpublished arXiv preprints" — build once, refresh repeatedly.
+
+**置信度 / Confidence**:预览里每条带 高/中/低 徽章(精确 DOI/arXiv 命中=高;标题搜索看
+相似度与作者重叠)。**低置信项默认不勾选**,避免误把配错的论文写进去 —— 想要就手动勾上。
+Each preview row shows a high/medium/low confidence badge; **low-confidence rows
+start unchecked** so a possibly-wrong match isn't written unless you tick it.
 
 ---
 
@@ -57,12 +62,14 @@ pane in Settings.
 
 ### 运行行为 / Behaviour
 
-| 选项 / Option                         | 说明 / Meaning                                                          |
-| ------------------------------------- | ----------------------------------------------------------------------- |
-| 更新作者列表 / Update authors         | 用数据源的作者列表替换条目作者。                                        |
-| 升级 arXiv 预印本 / Upgrade preprints | 对 arXiv 条目优先取正式发表版的 venue/年份/卷页。                       |
-| 跳过中文文献 / Skip Chinese           | 标题含中日韩汉字的条目直接跳过(这些源覆盖中文较差)。                    |
-| 备份旧值到 Extra / Back up to Extra   | 写回前把旧值追加到 Extra,形如 `[MetaRefresh 2026-06-14] title=… \| …`。 |
+| 选项 / Option                         | 说明 / Meaning                                                                |
+| ------------------------------------- | ----------------------------------------------------------------------------- |
+| 更新作者列表 / Update authors         | 用数据源的作者列表替换条目作者。                                              |
+| 升级 arXiv 预印本 / Upgrade preprints | 对 arXiv 条目优先取正式发表版的 venue/年份/卷页。                             |
+| 跳过中文文献 / Skip Chinese           | 标题含中日韩汉字的条目直接跳过(这些源覆盖中文较差)。                          |
+| 备份旧值到 Extra / Back up to Extra   | 写回前把旧值追加到 Extra,形如 `[MetaRefresh 2026-06-14] title=… \| …`。       |
+| 只填空字段 / Fill empty fields only   | **默认关**。开启后只写当前为空的字段,绝不覆盖已有值 —— 不想动已整理数据时用。 |
+| 集合含子集合 / Include subcollections | 集合刷新时是否递归处理子集合的条目。                                          |
 
 ### 匹配与限流 / Matching & rate limit
 

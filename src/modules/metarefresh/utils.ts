@@ -162,6 +162,29 @@ export function pickBestByTitle<T>(
   return best;
 }
 
+/**
+ * 根据匹配信号给出置信度。精确 ID 命中=高;否则按标题相似度,并在作者姓氏重叠
+ * 过低时下调 —— 用于在预览里标色并对低置信项默认不勾选。
+ *
+ * Match confidence from signals. Exact-ID hit = high; otherwise from title
+ * similarity, downgraded when author-surname overlap is low. `surnameOverlap`
+ * of -1 means "not comparable". Used to badge and auto-uncheck risky matches.
+ */
+export function matchConfidence(
+  exact: boolean,
+  sim: number,
+  surnameOverlap: number,
+): "high" | "medium" | "low" {
+  if (exact) return "high";
+  let c: "high" | "medium" | "low" =
+    sim >= 0.92 ? "high" : sim >= 0.87 ? "medium" : "low";
+  if (surnameOverlap >= 0) {
+    if (surnameOverlap < 0.2) c = "low";
+    else if (surnameOverlap < 0.5 && c === "high") c = "medium";
+  }
+  return c;
+}
+
 // —— arXiv 提取 / arXiv id extraction ————————————————————————
 
 /** arXiv id 形如 YYMM.NNNNN;校验月份 01-12 / validate the MM part. */

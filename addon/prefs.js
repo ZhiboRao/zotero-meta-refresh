@@ -9,6 +9,11 @@ pref("updateAuthors", true); // 是否更新作者列表 / refresh the author li
 pref("upgradePreprints", true); // arXiv 预印本升级到正式发表版 / upgrade arXiv preprints
 pref("skipChinese", true); // 跳过中文文献 / skip Chinese-titled items
 pref("backupToExtra", true); // 旧值备份到 Extra 字段 / back up old values to Extra
+// 只填空字段:绝不覆盖已有值(默认关 = 覆盖修复)。
+// Fill empty fields only: never overwrite existing values (off = overwrite/fix).
+pref("fillEmptyOnly", false);
+// 集合刷新是否递归子集合 / recurse into subcollections on collection refresh.
+pref("recurseCollections", false);
 
 // —— 匹配与限流 / Matching & rate-limit ——
 // 标题相似度阈值 (0-1)。Mozilla 偏好无浮点类型,故以字符串存储。

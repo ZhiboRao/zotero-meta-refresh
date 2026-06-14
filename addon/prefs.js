@@ -20,6 +20,9 @@ pref("delayMs", "1200");
 // 集合/整库范围一次最多处理多少条(安全上限,字符串存储)。
 // Safety cap for collection/library scope (stored as string).
 pref("maxItems", "200");
+// 并发处理的条目数(1-8)。按 host 节流仍生效,故不会突破各源限流。
+// Items processed concurrently (1-8). Per-host throttling still applies.
+pref("concurrency", "3");
 
 // —— 数据源开关 / Data-source toggles ——
 pref("useCrossref", true);

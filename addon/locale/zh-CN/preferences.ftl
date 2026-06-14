@@ -14,6 +14,7 @@ group-matching = 匹配与限流
 pref-threshold = 标题相似度阈值（0–1）
 pref-delay = 请求间隔（毫秒）
 pref-maxItems = 集合/整库单次最多处理条数
+pref-concurrency = 并发处理条数（1–8）
 
 group-sources = 数据源
 pref-useCrossref =

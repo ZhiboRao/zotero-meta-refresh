@@ -13,6 +13,8 @@ import { registerMenus } from "./modules/metarefresh/ui";
 function registerPrefs(): void {
   Zotero.PreferencePanes.register({
     pluginID: addon.data.config.addonID,
+    // 固定 id,供"打开设置"按钮定位本面板 / stable id for the Open Settings button.
+    id: `zotero-prefpane-${addon.data.config.addonRef}`,
     src: rootURI + "content/preferences.xhtml",
     label: getString("prefs-pane-title"),
     image: `chrome://${addon.data.config.addonRef}/content/icons/favicon.png`,

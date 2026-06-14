@@ -14,6 +14,7 @@ group-matching = Matching & rate limit
 pref-threshold = Title similarity threshold (0–1)
 pref-delay = Delay between API calls (ms)
 pref-maxItems = Max items per collection/library run
+pref-concurrency = Concurrent items (1–8)
 
 group-sources = Data sources
 pref-useCrossref =

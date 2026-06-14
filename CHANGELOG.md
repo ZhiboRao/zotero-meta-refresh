@@ -4,6 +4,17 @@
 [语义化版本](https://semver.org/lang/zh-CN/)。
 Format based on Keep a Changelog; this project adheres to Semantic Versioning.
 
+## [0.2.1] - 2026-06-14
+
+### Added / 新增
+
+- **有界并发**处理条目(新设置 `concurrency`,默认 3,范围 1–8);按 host 节流仍
+  生效,故并发不会突破各源限流。并发时同一查询会去重(只发一次)。
+  Bounded-concurrency item processing (new `concurrency` setting, default 3);
+  per-host throttling still caps rate, and identical concurrent queries dedupe.
+- 未填邮箱的提醒升级为**三按钮**:继续 / 取消 / **打开设置**(直接跳到本插件面板)。
+  The no-email reminder now offers **Open Settings** (jumps to this plugin's pane).
+
 ## [0.2.0] - 2026-06-14
 
 来自一次多维度代码审计的改进批次(数据安全、匹配质量、健壮性、UX、质量、文档)。

@@ -216,9 +216,15 @@ async function throttleHost(url: string, minIntervalMs: number): Promise<void> {
   } catch {
     /* keep raw url as key */
   }
-  const wait = (HOST_LAST.get(host) || 0) + minIntervalMs - Date.now();
+  // 同步预定下一个时槽,再 await —— 这样并发的同 host 请求会正确排队,
+  // 而非同时读到旧的 last 一起发出。
+  // Reserve the next slot synchronously *before* awaiting, so concurrent
+  // same-host requests queue up instead of all firing on a stale `last`.
+  const now = Date.now();
+  const scheduled = Math.max(now, (HOST_LAST.get(host) || 0) + minIntervalMs);
+  HOST_LAST.set(host, scheduled);
+  const wait = scheduled - now;
   if (wait > 0) await sleep(wait);
-  HOST_LAST.set(host, Date.now());
 }
 
 function backoffMs(attempt: number): number {

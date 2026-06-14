@@ -90,6 +90,8 @@ export interface RunConfig {
   s2ApiKey: string;
   /** 整库/集合范围的安全上限 / safety cap for library/collection scope. */
   maxItems: number;
+  /** 并发处理的条目数(按 host 节流仍生效)/ items processed concurrently. */
+  concurrency: number;
   sources: {
     crossref: boolean;
     openalex: boolean;

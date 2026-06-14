@@ -14,6 +14,7 @@ declare namespace _ZoteroTypes {
       "titleSimilarityThreshold": string;
       "delayMs": string;
       "maxItems": string;
+      "concurrency": string;
       "useCrossref": boolean;
       "useOpenAlex": boolean;
       "useS2": boolean;

@@ -66,8 +66,10 @@ pane in Settings.
 
 - **标题相似度阈值 / Title similarity threshold**(0–1,默认 0.85):匹配结果标题与原
   标题的相似度需 ≥ 该值才采用。调高更严格、更少误配;调低更宽松。
-- **请求间隔 / Delay (ms)**(默认 1200):每次 API 调用之间的等待。Semantic Scholar 无
-  key 时限流约 1 RPS,不建议调太低。
+- **请求间隔 / Delay (ms)**(默认 1200):同一数据源(host)两次请求的最小间隔。
+  Semantic Scholar 无 key 时限流约 1 RPS,不建议调太低。
+- **并发处理条数 / Concurrent items**(默认 3,1–8):同时处理多少条。由于"请求间隔"
+  是按 host 节流的,提高并发只会重叠网络等待、不会突破各源限流。条目多时可适当调高。
 
 ### 数据源 / Data sources
 

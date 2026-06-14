@@ -23,6 +23,89 @@ import { ItemPlan, RunConfig } from "./types";
 /** 预览里最多渲染多少块,避免超大批量把对话框撑爆 / render cap. */
 const RENDER_CAP = 200;
 
+/**
+ * 有界并发执行:同时最多 `concurrency` 个 worker 从队列取下一个 index 处理。
+ *
+ * Bounded-concurrency runner: at most `concurrency` workers pull the next index.
+ */
+async function runPool<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const run = async (): Promise<void> => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      await worker(items[i], i);
+    }
+  };
+  const lanes = Math.min(Math.max(1, concurrency), items.length);
+  await Promise.all(Array.from({ length: lanes }, () => run()));
+}
+
+/** 打开本插件的偏好面板(尽力而为)/ open this plugin's prefs pane (best-effort). */
+function openSettings(): void {
+  try {
+    const ui = (Zotero as any).Utilities?.Internal;
+    ui?.openPreferences?.(`zotero-prefpane-${config.addonRef}`);
+  } catch {
+    /* ignore — opening prefs is best-effort */
+  }
+}
+
+/**
+ * 未填邮箱时的提醒。优先用三按钮 confirmEx(继续 / 取消 / 打开设置);
+ * 拿不到 Services 时回退到普通 confirm。返回 true 表示继续刷新。
+ *
+ * No-email reminder. Prefers a 3-button confirmEx (Continue / Cancel / Open
+ * Settings), falling back to a plain confirm. Returns true to proceed.
+ */
+function remindEmail(win: any): boolean {
+  const text =
+    "未填写联系邮箱 / No contact email set\n\n" +
+    "CrossRef 和 OpenAlex 建议提供邮箱(礼貌池),以获得更稳定的服务。\n" +
+    "CrossRef and OpenAlex are more reliable with a contact email (polite pool).";
+  let Services: any;
+  try {
+    Services = (ztoolkit.getGlobal as any)("Services");
+  } catch {
+    Services = undefined;
+  }
+  const ps = Services?.prompt;
+  if (ps && win) {
+    const flags =
+      ps.BUTTON_POS_0 * ps.BUTTON_TITLE_IS_STRING +
+      ps.BUTTON_POS_1 * ps.BUTTON_TITLE_IS_STRING +
+      ps.BUTTON_POS_2 * ps.BUTTON_TITLE_IS_STRING;
+    // 0 = 继续 / Continue, 1 = 取消 / Cancel, 2 = 打开设置 / Open Settings
+    const idx = ps.confirmEx(
+      win,
+      config.addonName,
+      text,
+      flags,
+      "继续 / Continue",
+      "取消 / Cancel",
+      "打开设置 / Open Settings",
+      null,
+      { value: false },
+    );
+    if (idx === 2) {
+      openSettings();
+      return false;
+    }
+    return idx === 0;
+  }
+  // 回退 / fallback.
+  return win
+    ? win.confirm(
+        text +
+          "\n\n请在「工具 → 插件 → Zotero Metadata Refresh」中填写。\n仍要继续吗? / Continue anyway?",
+      )
+    : true;
+}
+
 /** 注册全部菜单入口(条目右键、集合右键、工具菜单)/ register all menu entries. */
 export function registerMenus(): void {
   const icon = `chrome://${config.addonRef}/content/icons/favicon@0.5x.png`;
@@ -285,16 +368,7 @@ export async function runRefresh(scope: RefreshScope): Promise<void> {
     !cfg.contactEmail.trim() &&
     (cfg.sources.crossref || cfg.sources.openalex)
   ) {
-    const ok = win
-      ? win.confirm(
-          "⚠️ 未填写联系邮箱 / No contact email set\n\n" +
-            "CrossRef 和 OpenAlex 建议提供邮箱(礼貌池)。\n" +
-            "请在「工具 → 插件 → Zotero Metadata Refresh」中填写。\n" +
-            "Set it in Tools → Plugins → Zotero Metadata Refresh.\n\n" +
-            "仍要继续吗? / Continue anyway?",
-        )
-      : true;
-    if (!ok) return;
+    if (!remindEmail(win)) return;
   }
 
   // 查询阶段 / query phase.
@@ -309,16 +383,17 @@ export async function runRefresh(scope: RefreshScope): Promise<void> {
     })
     .show();
 
+  // 有界并发处理:每条按索引写回保持顺序;按 host 节流仍生效,故不会突破限流。
+  // Bounded-concurrency processing: results written by index (order preserved);
+  // per-host throttling still applies, so concurrency won't exceed rate limits.
   const cache: QueryCache = new Map();
-  const plans: ItemPlan[] = [];
-  let idx = 0;
-  for (const item of items) {
-    idx++;
+  const plans: ItemPlan[] = new Array(items.length);
+  let completed = 0;
+  await runPool(items, cfg.concurrency, async (item, i) => {
     try {
-      const plan = await computePlan(item, cfg, cache);
-      plans.push(plan);
+      plans[i] = await computePlan(item, cfg, cache);
     } catch (e: any) {
-      plans.push({
+      plans[i] = {
         item,
         title: item.getField("title") || "(无标题)",
         status: "error",
@@ -326,13 +401,14 @@ export async function runRefresh(scope: RefreshScope): Promise<void> {
         fields: [],
         authors: null,
         queryLog: [`异常 / error: ${e?.message || e}`],
-      });
+      };
     }
+    completed++;
     progress.changeLine({
-      text: `查询中 ${idx}/${items.length} / Querying`,
-      progress: Math.round((idx / items.length) * 100),
+      text: `查询中 ${completed}/${items.length} / Querying`,
+      progress: Math.round((completed / items.length) * 100),
     });
-  }
+  });
   progress.changeLine({ text: "查询完成 / done", progress: 100 });
   progress.startCloseTimer(1200);
 

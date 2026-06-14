@@ -27,8 +27,11 @@ import { extractArxivId, hasChinese, similarity, sleep } from "./utils";
 
 export type RefreshScope = "selected" | "collection" | "library";
 
-/** 每轮查询缓存:同一 source+id/title 不重复请求 / per-run query cache. */
-export type QueryCache = Map<string, SourceRecord | null>;
+/**
+ * 每轮查询缓存:存 Promise 以便并发时同 key 的请求去重(只发一次)。
+ * Per-run query cache storing Promises, so concurrent identical queries dedupe.
+ */
+export type QueryCache = Map<string, Promise<SourceRecord | null>>;
 
 /** 字段名 → 对应的偏好开关 key / Zotero field → its pref toggle key. */
 const FIELD_PREF_MAP: Record<
@@ -58,6 +61,7 @@ export function readConfig(): RunConfig {
     parseFloat(String(getPref("titleSimilarityThreshold"))) || 0.85;
   const delayMs = parseInt(String(getPref("delayMs")), 10);
   const maxItems = parseInt(String(getPref("maxItems")), 10);
+  const concurrency = parseInt(String(getPref("concurrency")), 10);
   return {
     updateAuthors: Boolean(getPref("updateAuthors")),
     upgradePreprints: Boolean(getPref("upgradePreprints")),
@@ -68,6 +72,10 @@ export function readConfig(): RunConfig {
     contactEmail: String(getPref("contactEmail") || ""),
     s2ApiKey: String(getPref("s2ApiKey") || ""),
     maxItems: Number.isFinite(maxItems) && maxItems > 0 ? maxItems : 200,
+    concurrency:
+      Number.isFinite(concurrency) && concurrency > 0
+        ? Math.min(8, concurrency)
+        : 3,
     sources: {
       crossref: Boolean(getPref("useCrossref")),
       openalex: Boolean(getPref("useOpenAlex")),
@@ -163,16 +171,20 @@ export async function computePlan(
   const arxivId = extractArxivId(item);
   const queryLog = plan.queryLog;
 
-  // 带缓存执行一次源查询;限流/网络错误抛出不缓存。
-  // Run one cached source query; transport errors throw and are not cached.
-  const cached = async (
+  // 带缓存执行一次源查询。缓存 Promise:并发时同 key 只发一次请求;
+  // 若该 Promise 以传输错误 reject,后续同 key 也复用(不再 hammer)。
+  // Cache the Promise: concurrent same-key queries share one request; a
+  // transport-error rejection is reused too (don't hammer a throttled host).
+  const cached = (
     key: string,
     fn: () => Promise<SourceRecord | null>,
   ): Promise<SourceRecord | null> => {
-    if (cache.has(key)) return cache.get(key) as SourceRecord | null;
-    const r = await fn();
-    cache.set(key, r);
-    return r;
+    let p = cache.get(key);
+    if (!p) {
+      p = fn();
+      cache.set(key, p);
+    }
+    return p;
   };
 
   // 尝试一个源。exact=true(DOI/arXiv 精确命中)时无条件采用,不过相似度门;

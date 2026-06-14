@@ -13,6 +13,7 @@ export type FluentMessageId =
   | 'menu-refresh-selected'
   | 'menu-restore-selected'
   | 'pref-backupToExtra'
+  | 'pref-concurrency'
   | 'pref-contactEmail'
   | 'pref-delay'
   | 'pref-fieldAbstractNote'

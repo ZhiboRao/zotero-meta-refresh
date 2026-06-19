@@ -197,51 +197,98 @@ function remindEmail(win: any): boolean {
     : true;
 }
 
-/** 注册全部菜单入口(条目右键、集合右键、工具菜单)/ register all menu entries. */
-export function registerMenus(): void {
+/**
+ * 为某个主窗口注册全部菜单入口(条目右键、集合右键、工具菜单)。
+ *
+ * Register all menu entries into ONE main window's popups (item right-click,
+ * collection right-click, Tools menu).
+ *
+ * 必须逐窗口注册:zotero-plugin-toolkit 是把 menuitem 当作 DOM 节点插进某一个
+ * document(以 ``Zotero.getMainWindow()`` 为准),既不会按窗口重插,也不监听
+ * popupshowing。因此每个主窗口——包括 macOS 关掉所有窗口后从 Dock 重开的新窗口
+ * ——都必须各注册一份,否则它的右键里就什么都没有。这正是"有时候右键不出现"的根因。
+ *
+ * Must run per window: the toolkit inserts each menuitem as a DOM node into a
+ * single document (the one ``Zotero.getMainWindow()`` returns), with no
+ * re-insertion and no popupshowing hook. So every main window — including one
+ * reopened from the macOS dock after all windows were closed — needs its own
+ * copy; otherwise its right-click menu is empty. This is the root cause of the
+ * intermittently-missing context menu.
+ *
+ * Args:
+ *   win: 目标主窗口 / the main window whose popups to populate.
+ */
+export function registerMenus(win: _ZoteroTypes.MainWindow): void {
+  const doc = win.document;
+  // 已注册过就跳过:初始窗口会被 onStartup 的 getMainWindows() 循环与 Zotero 自身
+  // 的 onMainWindowLoad 回调各触发一次,而 toolkit 不按 id 去重,避免重复插入。
+  // Skip if already present: the initial window is visited twice (onStartup's
+  // getMainWindows() loop AND Zotero's own onMainWindowLoad callback) and the
+  // toolkit does not de-dupe by id — guard against a double insert.
+  if (doc.querySelector(`#zotero-itemmenu-${config.addonRef}-refresh`)) {
+    return;
+  }
+
   const icon = `chrome://${config.addonRef}/content/icons/favicon@0.5x.png`;
-  ztoolkit.Menu.register("item", {
-    tag: "menuitem",
-    id: `zotero-itemmenu-${config.addonRef}-refresh`,
-    label: getString("menu-refresh-selected"),
-    icon,
-    commandListener: () => void runRefresh("selected"),
-  });
-  ztoolkit.Menu.register("item", {
-    tag: "menuitem",
-    id: `zotero-itemmenu-${config.addonRef}-restore`,
-    label: getString("menu-restore-selected"),
-    commandListener: () => void runRestore(),
-  });
-  ztoolkit.Menu.register("item", {
-    tag: "menuitem",
-    id: `zotero-itemmenu-${config.addonRef}-citations`,
-    label: getString("menu-fetch-citations"),
-    commandListener: () => void runFetchCitations("selected"),
-  });
+  // 传具体 popup 元素,而非字符串:字符串路径会经 getGlobal("document") 解析成
+  // 最顶层窗口,在逐窗口注册时会指向错误的窗口。
+  // Pass the explicit popup element, not the string: the string path resolves via
+  // getGlobal("document") to the topmost window, which is wrong inside a per-window
+  // registration loop.
+  const itemPopup = doc.querySelector("#zotero-itemmenu");
+  const collectionPopup = doc.querySelector("#zotero-collectionmenu");
+  const toolsPopup = doc.querySelector("#menu_ToolsPopup");
+
+  if (itemPopup) {
+    ztoolkit.Menu.register(itemPopup as any, {
+      tag: "menuitem",
+      id: `zotero-itemmenu-${config.addonRef}-refresh`,
+      label: getString("menu-refresh-selected"),
+      icon,
+      commandListener: () => void runRefresh("selected"),
+    });
+    ztoolkit.Menu.register(itemPopup as any, {
+      tag: "menuitem",
+      id: `zotero-itemmenu-${config.addonRef}-restore`,
+      label: getString("menu-restore-selected"),
+      commandListener: () => void runRestore(),
+    });
+    ztoolkit.Menu.register(itemPopup as any, {
+      tag: "menuitem",
+      id: `zotero-itemmenu-${config.addonRef}-citations`,
+      label: getString("menu-fetch-citations"),
+      commandListener: () => void runFetchCitations("selected"),
+    });
+  }
+
   // 集合右键菜单也覆盖"保存的检索"——点击时按选中项类型分派。
   // The collection menu also covers saved searches — dispatch by selection.
-  ztoolkit.Menu.register("collection", {
-    tag: "menuitem",
-    id: `zotero-collectionmenu-${config.addonRef}-refresh`,
-    label: getString("menu-refresh-collection"),
-    icon,
-    commandListener: () => void runCollectionOrSearch(),
-  });
-  ztoolkit.Menu.register("menuTools", {
-    tag: "menuitem",
-    id: `zotero-menutools-${config.addonRef}-library`,
-    label: getString("menu-refresh-library"),
-    icon,
-    commandListener: () => void runRefresh("library"),
-  });
-  ztoolkit.Menu.register("menuTools", {
-    tag: "menuitem",
-    id: `zotero-menutools-${config.addonRef}-preprintscan`,
-    label: getString("menu-preprint-scan"),
-    icon,
-    commandListener: () => void runPreprintScan("library"),
-  });
+  if (collectionPopup) {
+    ztoolkit.Menu.register(collectionPopup as any, {
+      tag: "menuitem",
+      id: `zotero-collectionmenu-${config.addonRef}-refresh`,
+      label: getString("menu-refresh-collection"),
+      icon,
+      commandListener: () => void runCollectionOrSearch(),
+    });
+  }
+
+  if (toolsPopup) {
+    ztoolkit.Menu.register(toolsPopup as any, {
+      tag: "menuitem",
+      id: `zotero-menutools-${config.addonRef}-library`,
+      label: getString("menu-refresh-library"),
+      icon,
+      commandListener: () => void runRefresh("library"),
+    });
+    ztoolkit.Menu.register(toolsPopup as any, {
+      tag: "menuitem",
+      id: `zotero-menutools-${config.addonRef}-preprintscan`,
+      label: getString("menu-preprint-scan"),
+      icon,
+      commandListener: () => void runPreprintScan("library"),
+    });
+  }
 }
 
 // —— HTML helpers ——

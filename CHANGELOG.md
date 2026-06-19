@@ -4,6 +4,21 @@
 [语义化版本](https://semver.org/lang/zh-CN/)。
 Format based on Keep a Changelog; this project adheres to Semantic Versioning.
 
+## [0.4.1] - 2026-06-19
+
+### Fixed / 修复
+
+- **右键/工具菜单"有时候不出现"**:菜单原本只在启动时注册一次,被插进了"当时那个
+  主窗口"的弹出菜单里。在 macOS 上关掉所有窗口后(Zotero 仍在 Dock)再从 Dock 重新
+  打开,会得到一个全新窗口,它的右键里就没有本插件入口。现改为**逐窗口注册**
+  (`onMainWindowLoad`),并向各窗口传入具体的弹出菜单元素,加了幂等守卫避免重复插入。
+  **Context/Tools menus sometimes missing**: menus were registered once at
+  startup into a single window's popup. After closing all windows on macOS (with
+  Zotero still running) and reopening from the dock, the new window's right-click
+  menu lacked our entries. Now registered **per main window** in
+  `onMainWindowLoad`, targeting each window's own popup elements, with an
+  id-existence guard against double insertion.
+
 ## [0.4.0] - 2026-06-14
 
 来自创意 workflow 的功能批次(3/4;多源 venue 冲突选择器留作下一轮核心改造)。

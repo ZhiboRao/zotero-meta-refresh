@@ -35,11 +35,13 @@ async function onStartup() {
   ]);
 
   initLocale();
-  // ztoolkit 与菜单都是全局的,启动时建一次即可,无需每窗口重复。
-  // ztoolkit and menus are global; create/register once at startup.
+  // ztoolkit 是全局的,启动时建一次;菜单改为逐窗口注册(见 onMainWindowLoad),
+  // 因为 toolkit 把 menuitem 插进具体某个窗口的 document,只注册一次会漏掉别的窗口。
+  // ztoolkit is global (build once at startup); menus are now registered
+  // per-window in onMainWindowLoad — the toolkit inserts each menuitem into one
+  // window's document, so a single startup registration misses other windows.
   addon.data.ztoolkit = createZToolkit();
   registerPrefs();
-  registerMenus();
   // 原生列与 item-pane 体检区(各自内部 try/catch,失败不影响启动)。
   // Native columns + item-pane section (each guarded; failure won't break load).
   registerColumns();
@@ -52,7 +54,7 @@ async function onStartup() {
   addon.data.initialized = true;
 }
 
-/** 每个主窗口加载时:把 item-pane 体检区用到的 ftl 注入该窗口。 */
+/** 每个主窗口加载时:注入 item-pane 用到的 ftl,并为该窗口注册菜单。 */
 async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
   try {
     win.MozXULElement.insertFTLIfNeeded(
@@ -61,6 +63,12 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
   } catch {
     /* item-pane l10n is best-effort */
   }
+  // 逐窗口注册右键/工具菜单:toolkit 把元素插进具体 document,新开或(尤其 macOS)
+  // 从 Dock 重开的窗口必须各注册一次,否则右键里没有本插件的入口。
+  // Register menus per window: the toolkit inserts elements into a specific
+  // document, so every newly opened or (notably on macOS) dock-reopened window
+  // must register its own copy — otherwise its right-click menu lacks our entries.
+  registerMenus(win);
 }
 
 /** 主窗口卸载时:仅关闭可能开着的对话框,不在此注销全局菜单。 */

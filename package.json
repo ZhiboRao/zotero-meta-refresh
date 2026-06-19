@@ -1,7 +1,7 @@
 {
   "name": "zotero-meta-refresh",
   "type": "module",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Batch-refresh Zotero item metadata from CrossRef, OpenAlex, Semantic Scholar and DBLP, with a preview-confirm flow, field whitelist, preprint upgrade and old-value backup to Extra.",
   "config": {
     "addonName": "Zotero Metadata Refresh",

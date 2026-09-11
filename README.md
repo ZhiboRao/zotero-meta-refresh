@@ -9,7 +9,10 @@ whitelist, preprint upgrade and old-value backup.
 > 详细使用说明见 **[doc/USAGE.md](doc/USAGE.md)**(中英文帮助文档)。
 > For a full walkthrough and FAQ, see **[doc/USAGE.md](doc/USAGE.md)**.
 
-兼容 **Zotero 7 – 9**(`strict_min_version 7.0`,`strict_max_version 9.*`)。
+兼容 **Zotero 10**(`strict_min_version 10.0`,`strict_max_version 10.*`)。
+自 v0.5.0 起菜单改用 Zotero 10 的原生 `Zotero.MenuManager`,因此**不再支持 Zotero 7 – 9**;仍在旧版本上的用户请停留在 v0.4.1。
+Requires **Zotero 10**. Since v0.5.0 menus go through Zotero 10's native `Zotero.MenuManager`, so Zotero 7 – 9 are no longer supported — stay on
+v0.4.1 if you are still on one of those.
 
 ---
 

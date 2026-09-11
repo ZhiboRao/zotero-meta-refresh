@@ -7,7 +7,7 @@
 import { getString, initLocale } from "./utils/locale";
 import { createZToolkit } from "./utils/ztoolkit";
 import { registerPrefsScripts } from "./modules/preferenceScript";
-import { registerMenus } from "./modules/metarefresh/ui";
+import { registerMenus, unregisterMenus } from "./modules/metarefresh/ui";
 import {
   registerColumns,
   registerItemPaneSection,
@@ -26,7 +26,7 @@ function registerPrefs(): void {
   });
 }
 
-/** 启动一次:建 ztoolkit、注册偏好面板与菜单(全局,一次即可)。 */
+/** 启动一次:建 ztoolkit,注册偏好面板、菜单、列与 item-pane 区(均为全局)。 */
 async function onStartup() {
   await Promise.all([
     Zotero.initializationPromise,
@@ -35,13 +35,14 @@ async function onStartup() {
   ]);
 
   initLocale();
-  // ztoolkit 是全局的,启动时建一次;菜单改为逐窗口注册(见 onMainWindowLoad),
-  // 因为 toolkit 把 menuitem 插进具体某个窗口的 document,只注册一次会漏掉别的窗口。
-  // ztoolkit is global (build once at startup); menus are now registered
-  // per-window in onMainWindowLoad — the toolkit inserts each menuitem into one
-  // window's document, so a single startup registration misses other windows.
+  // 全部一次性注册:Zotero 10 的菜单/列/面板都是原生 API,按 pluginID 管理,
+  // 由 Zotero 负责把它们铺到每一个窗口,不需要逐窗口重注册。
+  // Everything registers once: on Zotero 10 menus, columns and sections are all
+  // native, pluginID-scoped APIs, and Zotero itself propagates them to every
+  // window — no per-window re-registration needed.
   addon.data.ztoolkit = createZToolkit();
   registerPrefs();
+  registerMenus();
   // 原生列与 item-pane 体检区(各自内部 try/catch,失败不影响启动)。
   // Native columns + item-pane section (each guarded; failure won't break load).
   registerColumns();
@@ -54,21 +55,22 @@ async function onStartup() {
   addon.data.initialized = true;
 }
 
-/** 每个主窗口加载时:注入 item-pane 用到的 ftl,并为该窗口注册菜单。 */
+/**
+ * 每个主窗口加载时:注入 ftl。菜单项与 item-pane 体检区的标签都是 l10nID,
+ * 必须在该窗口的 document 里挂上本插件的 ftl 才解析得出来。
+ *
+ * Per main window: inject the ftl. Both the menu items and the item-pane
+ * section carry l10nIDs, which only resolve once this plugin's ftl is linked
+ * into that window's document.
+ */
 async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
   try {
     win.MozXULElement.insertFTLIfNeeded(
       `${addon.data.config.addonRef}-mainWindow.ftl`,
     );
   } catch {
-    /* item-pane l10n is best-effort */
+    /* l10n 注入是尽力而为 / l10n injection is best-effort */
   }
-  // 逐窗口注册右键/工具菜单:toolkit 把元素插进具体 document,新开或(尤其 macOS)
-  // 从 Dock 重开的窗口必须各注册一次,否则右键里没有本插件的入口。
-  // Register menus per window: the toolkit inserts elements into a specific
-  // document, so every newly opened or (notably on macOS) dock-reopened window
-  // must register its own copy — otherwise its right-click menu lacks our entries.
-  registerMenus(win);
 }
 
 /** 主窗口卸载时:仅关闭可能开着的对话框,不在此注销全局菜单。 */
@@ -79,6 +81,7 @@ async function onMainWindowUnload(_win: Window): Promise<void> {
 
 /** 插件关闭:在此统一注销 / unregister everything on shutdown only. */
 function onShutdown(): void {
+  unregisterMenus();
   unregisterNative();
   ztoolkit.unregisterAll();
   addon.data.dialog?.window?.close();

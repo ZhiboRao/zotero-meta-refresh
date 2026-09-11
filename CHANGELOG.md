@@ -4,6 +4,63 @@
 [语义化版本](https://semver.org/lang/zh-CN/)。
 Format based on Keep a Changelog; this project adheres to Semantic Versioning.
 
+## [0.5.0] - 2026-09-11
+
+适配 Zotero 10。Zotero 10 把插件菜单收进了官方 API,同时 zotero-plugin-toolkit 5.2
+删掉了自带的 MenuTool —— 这一版跟着迁移过去,并换掉了一直沿用插件模板的图标。
+Zotero 10 support. Zotero 10 moved plugin menus into an official API and
+zotero-plugin-toolkit 5.2 dropped its own MenuTool; this release follows that
+migration and replaces the icon still inherited from the plugin template.
+
+### Changed / 变更
+
+- **兼容区间改为 Zotero 10**(`strict_min_version 10.0`,`strict_max_version 10.*`)。
+  旧的 `strict_max_version 9.*` 是插件在 Zotero 10.0.2 上「装不上/被停用」的直接原因。
+  **不再支持 Zotero 7 – 9**,旧版本用户请停留在 v0.4.1。
+  **Compatibility range is now Zotero 10.** The old `strict_max_version 9.*` was
+  the direct reason the plugin refused to load on Zotero 10.0.2. Zotero 7 – 9 are
+  no longer supported; stay on v0.4.1 for those.
+- **菜单改用原生 `Zotero.MenuManager`**:条目右键、集合右键、工具菜单三处按 target
+  全局注册一次,由 Zotero 负责铺到每个窗口。菜单标签只能走 Fluent,所以 `menu-*`
+  文案从 `addon.ftl` 移到了随窗口注入的 `mainWindow.ftl`。
+  **Menus now use the native `Zotero.MenuManager`**: the item, collection and
+  Tools menus each register once per target and Zotero propagates them to every
+  window. Native menu labels are Fluent-only, so the `menu-*` strings moved from
+  `addon.ftl` to the per-window `mainWindow.ftl`.
+- **依赖升级**:zotero-plugin-toolkit 5.2.0、zotero-types 4.1.3、
+  zotero-plugin-scaffold 0.9.2。toolkit 5.2 不再从包根导出全家桶 `ZoteroToolkit`,
+  改为只组装本插件用到的 `BasicTool` / `UI` / `Dialog` / `ProgressWindow`,打包体积
+  从 54 KB 降到 38 KB。esbuild target 同步升到 `firefox140`(Zotero 10 的 Gecko 版本)。
+  **Dependencies upgraded** to zotero-plugin-toolkit 5.2.0, zotero-types 4.1.3 and
+  zotero-plugin-scaffold 0.9.2. toolkit 5.2 no longer exports the all-in-one
+  `ZoteroToolkit` from the package root, so we assemble just the helpers this
+  plugin uses — the xpi drops from 54 KB to 38 KB. The esbuild target moves to
+  `firefox140`, matching Zotero 10's Gecko.
+- **换了图标**:原来用的是插件模板自带的蓝色「翻译」图标,与本插件无关;现在是
+  Zotero 品牌红的「刷新环 + 元数据横条」,透明底,深浅色主题下都清晰。几何由
+  `tools/make_icons.py` 计算生成,可复现。
+  **New icon.** The old one was the blue _translate_ glyph inherited from the
+  plugin template and had nothing to do with this plugin. It is now a refresh
+  ring around two metadata bars in Zotero's brand red, on a transparent ground so
+  it reads on both light and dark themes. Generated reproducibly by
+  `tools/make_icons.py`.
+
+### Fixed / 修复
+
+- **图标尺寸与 manifest 声明不符**:`manifest.json` 声明 48 / 96,实际文件却是
+  16 / 32,插件管理器里一直是放大后的糊图。现已按声明输出 48 × 48 与 96 × 96。
+  **Icon sizes did not match the manifest**: it declared 48 / 96 while the files
+  were 16 / 32, so the Add-ons manager showed an upscaled blur. They are now
+  genuinely 48 × 48 and 96 × 96.
+- **右键菜单偶发缺失**(v0.4.1 只是绕开)现在从机制上消失:原生菜单由 Zotero 在每次
+  popupshowing 时构建到当前窗口,不再依赖插件自己往某个 document 插 DOM 节点,因此
+  从 macOS Dock 重开的新窗口也必然带上菜单。逐窗口注册的那套代码已删除。
+  **The intermittently-missing context menu** (only worked around in v0.4.1) is now
+  structurally impossible: Zotero builds native menus into whichever window opens
+  the popup, instead of the plugin inserting DOM nodes into one document, so a
+  window reopened from the macOS dock always has them. The per-window
+  registration code is gone.
+
 ## [0.4.1] - 2026-06-19
 
 ### Fixed / 修复

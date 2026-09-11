@@ -6,7 +6,7 @@
  */
 
 import { config } from "../../../package.json";
-import { getString } from "../../utils/locale";
+import { getLocaleID } from "../../utils/locale";
 import {
   applyPlan,
   applyRestore,
@@ -197,98 +197,125 @@ function remindEmail(win: any): boolean {
     : true;
 }
 
+/** 已注册菜单的 menuID,插件关闭时逐个注销 / registered menu IDs, undone on shutdown. */
+const registeredMenus: string[] = [];
+
+/** 单个 target 注册一组菜单项,失败只记日志 / register one target's menus. */
+function registerMenu(options: _ZoteroTypes.MenuManager.AllMenuOptions): void {
+  try {
+    const menuID = Zotero.MenuManager.registerMenu(options);
+    if (menuID) registeredMenus.push(menuID);
+    else ztoolkit.log("[MetaRefresh] registerMenu rejected", options.menuID);
+  } catch (e) {
+    ztoolkit.log("[MetaRefresh] registerMenu failed", options.menuID, e);
+  }
+}
+
 /**
- * 为某个主窗口注册全部菜单入口(条目右键、集合右键、工具菜单)。
+ * 注册全部菜单入口(条目右键、集合右键、工具菜单),全局一次即可。
  *
- * Register all menu entries into ONE main window's popups (item right-click,
- * collection right-click, Tools menu).
+ * Register every menu entry (item right-click, collection right-click and the
+ * Tools menu) once, globally.
  *
- * 必须逐窗口注册:zotero-plugin-toolkit 是把 menuitem 当作 DOM 节点插进某一个
- * document(以 ``Zotero.getMainWindow()`` 为准),既不会按窗口重插,也不监听
- * popupshowing。因此每个主窗口——包括 macOS 关掉所有窗口后从 Dock 重开的新窗口
- * ——都必须各注册一份,否则它的右键里就什么都没有。这正是"有时候右键不出现"的根因。
+ * Zotero 10 提供了原生的 `Zotero.MenuManager`:按 target 注册一次,之后由 Zotero 在
+ * 每次 popupshowing 时往正在打开菜单的那个窗口现场构建。这替掉了旧版"逐窗口插
+ * DOM 节点"的做法 —— 后者在 macOS 从 Dock 重开窗口时会漏注册,正是 v0.4.1 里
+ * "右键菜单有时不出现"的根因,现在从机制上不会再发生。
  *
- * Must run per window: the toolkit inserts each menuitem as a DOM node into a
- * single document (the one ``Zotero.getMainWindow()`` returns), with no
- * re-insertion and no popupshowing hook. So every main window — including one
- * reopened from the macOS dock after all windows were closed — needs its own
- * copy; otherwise its right-click menu is empty. This is the root cause of the
- * intermittently-missing context menu.
+ * 标签只能走 Fluent:原生 API 不接受纯字符串 `label`,只认 `l10nID`。因此 menu-*
+ * 文案从 addon.ftl 移到了 mainWindow.ftl —— 后者会由 onMainWindowLoad 注入进主窗口
+ * 的 document,菜单元素才解析得到。
  *
- * Args:
- *   win: 目标主窗口 / the main window whose popups to populate.
+ * Zotero 10 ships a native `Zotero.MenuManager`: register once per target and
+ * Zotero builds the items into whichever window is opening the popup. This
+ * replaces the old per-window DOM insertion, which missed windows reopened from
+ * the macOS dock — the root cause of the intermittently-missing context menu in
+ * v0.4.1, now structurally impossible.
+ *
+ * Labels must come from Fluent: the native API takes no plain `label`, only an
+ * `l10nID`. So the menu-* strings moved from addon.ftl to mainWindow.ftl, which
+ * onMainWindowLoad injects into the main window document where the menu
+ * elements can resolve them.
  */
-export function registerMenus(win: _ZoteroTypes.MainWindow): void {
-  const doc = win.document;
-  // 已注册过就跳过:初始窗口会被 onStartup 的 getMainWindows() 循环与 Zotero 自身
-  // 的 onMainWindowLoad 回调各触发一次,而 toolkit 不按 id 去重,避免重复插入。
-  // Skip if already present: the initial window is visited twice (onStartup's
-  // getMainWindows() loop AND Zotero's own onMainWindowLoad callback) and the
-  // toolkit does not de-dupe by id — guard against a double insert.
-  if (doc.querySelector(`#zotero-itemmenu-${config.addonRef}-refresh`)) {
-    return;
-  }
-
+export function registerMenus(): void {
   const icon = `chrome://${config.addonRef}/content/icons/favicon@0.5x.png`;
-  // 传具体 popup 元素,而非字符串:字符串路径会经 getGlobal("document") 解析成
-  // 最顶层窗口,在逐窗口注册时会指向错误的窗口。
-  // Pass the explicit popup element, not the string: the string path resolves via
-  // getGlobal("document") to the topmost window, which is wrong inside a per-window
-  // registration loop.
-  const itemPopup = doc.querySelector("#zotero-itemmenu");
-  const collectionPopup = doc.querySelector("#zotero-collectionmenu");
-  const toolsPopup = doc.querySelector("#menu_ToolsPopup");
 
-  if (itemPopup) {
-    ztoolkit.Menu.register(itemPopup as any, {
-      tag: "menuitem",
-      id: `zotero-itemmenu-${config.addonRef}-refresh`,
-      label: getString("menu-refresh-selected"),
-      icon,
-      commandListener: () => void runRefresh("selected"),
-    });
-    ztoolkit.Menu.register(itemPopup as any, {
-      tag: "menuitem",
-      id: `zotero-itemmenu-${config.addonRef}-restore`,
-      label: getString("menu-restore-selected"),
-      commandListener: () => void runRestore(),
-    });
-    ztoolkit.Menu.register(itemPopup as any, {
-      tag: "menuitem",
-      id: `zotero-itemmenu-${config.addonRef}-citations`,
-      label: getString("menu-fetch-citations"),
-      commandListener: () => void runFetchCitations("selected"),
-    });
-  }
+  registerMenu({
+    menuID: `${config.addonRef}-library-item`,
+    pluginID: config.addonID,
+    target: "main/library/item",
+    menus: [
+      {
+        menuType: "menuitem",
+        l10nID: getLocaleID("menu-refresh-selected"),
+        icon,
+        onCommand: () => void runRefresh("selected"),
+      },
+      {
+        menuType: "menuitem",
+        l10nID: getLocaleID("menu-restore-selected"),
+        onCommand: () => void runRestore(),
+      },
+      {
+        menuType: "menuitem",
+        l10nID: getLocaleID("menu-fetch-citations"),
+        onCommand: () => void runFetchCitations("selected"),
+      },
+    ],
+  });
 
   // 集合右键菜单也覆盖"保存的检索"——点击时按选中项类型分派。
   // The collection menu also covers saved searches — dispatch by selection.
-  if (collectionPopup) {
-    ztoolkit.Menu.register(collectionPopup as any, {
-      tag: "menuitem",
-      id: `zotero-collectionmenu-${config.addonRef}-refresh`,
-      label: getString("menu-refresh-collection"),
-      icon,
-      commandListener: () => void runCollectionOrSearch(),
-    });
-  }
+  registerMenu({
+    menuID: `${config.addonRef}-library-collection`,
+    pluginID: config.addonID,
+    target: "main/library/collection",
+    menus: [
+      {
+        menuType: "menuitem",
+        l10nID: getLocaleID("menu-refresh-collection"),
+        icon,
+        onCommand: () => void runCollectionOrSearch(),
+      },
+    ],
+  });
 
-  if (toolsPopup) {
-    ztoolkit.Menu.register(toolsPopup as any, {
-      tag: "menuitem",
-      id: `zotero-menutools-${config.addonRef}-library`,
-      label: getString("menu-refresh-library"),
-      icon,
-      commandListener: () => void runRefresh("library"),
-    });
-    ztoolkit.Menu.register(toolsPopup as any, {
-      tag: "menuitem",
-      id: `zotero-menutools-${config.addonRef}-preprintscan`,
-      label: getString("menu-preprint-scan"),
-      icon,
-      commandListener: () => void runPreprintScan("library"),
-    });
+  registerMenu({
+    menuID: `${config.addonRef}-tools`,
+    pluginID: config.addonID,
+    target: "main/menubar/tools",
+    menus: [
+      {
+        menuType: "menuitem",
+        l10nID: getLocaleID("menu-refresh-library"),
+        icon,
+        onCommand: () => void runRefresh("library"),
+      },
+      {
+        menuType: "menuitem",
+        l10nID: getLocaleID("menu-preprint-scan"),
+        icon,
+        onCommand: () => void runPreprintScan("library"),
+      },
+    ],
+  });
+}
+
+/**
+ * 注销全部菜单(插件关闭时)。
+ *
+ * Unregister every menu on shutdown. Zotero also drops a plugin's menus by
+ * pluginID, but doing it explicitly keeps disable/enable cycles clean.
+ */
+export function unregisterMenus(): void {
+  for (const menuID of registeredMenus) {
+    try {
+      Zotero.MenuManager.unregisterMenu(menuID);
+    } catch {
+      /* 关闭路径不抛错 / never throw on the shutdown path */
+    }
   }
+  registeredMenus.length = 0;
 }
 
 // —— HTML helpers ——
